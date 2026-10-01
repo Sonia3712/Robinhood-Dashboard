@@ -1,0 +1,361 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0f1419;
+  color: #e4e7ec;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1f2e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a4352;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a5362;
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-slate-300 to-blue-400 bg-clip-text text-transparent;
+  }
+  
+  .glass {
+    @apply bg-slate-900/80 backdrop-blur-sm border border-slate-700/50;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+}
+
+/* Dark table styles */
+.table-container {
+  @apply bg-slate-900/90 border border-slate-700/50 rounded-lg overflow-hidden;
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.table-header {
+  @apply bg-slate-800 border-b border-slate-700/50;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-header th {
+  @apply px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap;
+  background: inherit;
+}
+
+.table-body {
+  @apply divide-y divide-slate-800/50;
+}
+
+.table-row {
+  @apply hover:bg-slate-800/50 transition-colors duration-100;
+}
+
+.table-cell {
+  @apply px-3 py-2 text-sm whitespace-nowrap;
+}
+
+.table-cell-right {
+  @apply text-right;
+}
+
+.table-cell-center {
+  @apply text-center;
+}
+
+/* Token column styles */
+.token-cell {
+  @apply max-w-md min-w-[200px];
+}
+
+.token-info {
+  @apply flex items-center gap-2 min-w-0;
+}
+
+.token-icons {
+  @apply flex items-center gap-1 flex-shrink-0;
+}
+
+/* Individual icon styles */
+.token-icon {
+  @apply rounded-full object-cover border border-slate-600 flex-shrink-0;
+}
+
+/* Clickable wrapper for the base token icon. Fixed size so opening the preview
+   cannot resize the row, and no scale/hover transform. */
+.token-icon-button {
+  @apply flex-shrink-0 rounded-full cursor-zoom-in bg-transparent p-0 border-0;
+  line-height: 0;
+}
+
+.token-icon-primary {
+  @apply w-7 h-7;
+}
+
+.token-icon-quote {
+  @apply w-5 h-5 opacity-70;
+}
+
+.token-icon-fallback {
+  @apply rounded-full flex items-center justify-center text-white font-bold flex-shrink-0;
+}
+
+.token-icon-fallback.token-icon-primary {
+  @apply w-7 h-7 text-sm;
+}
+
+.token-icon-fallback.token-icon-quote {
+  @apply w-5 h-5 text-xs opacity-70;
+}
+
+.token-details {
+  @apply min-w-0 flex-1;
+}
+
+.token-symbol {
+  @apply font-semibold text-slate-100 truncate;
+}
+
+.token-name {
+  @apply text-xs text-slate-500 truncate;
+}
+
+.token-pair {
+  @apply text-xs text-slate-500 truncate;
+}
+
+/* Compact DEX label inline */
+.token-dex-label {
+  @apply text-[10px] text-slate-500 font-medium px-1.5 py-0.5 bg-slate-800 rounded whitespace-nowrap flex-shrink-0;
+}
+
+/* Color utilities for price changes */
+.price-up {
+  @apply text-green-400;
+}
+
+.price-down {
+  @apply text-red-400;
+}
+
+.price-neutral {
+  @apply text-slate-500;
+}
+
+/* Compact number formatting */
+.compact-number {
+  @apply font-mono text-slate-200;
+}
+
+.compact-number-muted {
+  @apply font-mono text-slate-500;
+}
+
+/* Search bar dark style */
+.search-input {
+  @apply w-full pl-10 pr-10 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200;
+}
+
+/* Tab styles */
+.tab-button {
+  @apply flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap;
+}
+
+.tab-active {
+  @apply border-blue-500 text-blue-400 bg-slate-800/50;
+}
+
+.tab-inactive {
+  @apply border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/50;
+}
+
+/* Toolbar */
+.toolbar {
+  @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 border-b border-slate-700/50;
+}
+
+.toolbar-group {
+  @apply flex items-center gap-2 flex-wrap;
+}
+
+/* Select dark style - base styles without custom background image */
+.select-dark {
+  @apply px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 appearance-none pr-10;
+}
+
+/* Badge colors */
+.badge-dex {
+  @apply bg-blue-900/50 text-blue-400;
+}
+
+.badge-source-gecko {
+  @apply bg-green-900/50 text-green-400;
+}
+
+.badge-source-dexscreener {
+  @apply bg-purple-900/50 text-purple-400;
+}
+
+.badge-source-rpc {
+  @apply bg-orange-900/50 text-orange-400;
+}
+
+.badge-verified {
+  @apply bg-emerald-900/50 text-emerald-400;
+}
+
+/* Dim the table slightly while a background poll is in flight. The rows stay
+   mounted and the header stays put. */
+.table-container.is-refreshing tbody {
+  opacity: 0.6;
+  transition: opacity 120ms ease-out;
+}
+
+/* Token image preview - portalled to <body> so table overflow never clips it */
+.token-preview-overlay {
+  @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(2px);
+}
+
+.token-preview-card {
+  @apply relative flex flex-col items-center gap-3 p-5 rounded-2xl;
+  background: #0f172a;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
+}
+
+.token-preview-image {
+  @apply rounded-2xl object-contain bg-slate-800;
+  width: 256px;
+  height: 256px;
+  max-width: 70vw;
+  max-height: 70vh;
+}
+
+.token-preview-close {
+  @apply absolute top-2 right-2 p-1 rounded-full text-slate-400 hover:text-slate-100 hover:bg-slate-700/70 transition-colors;
+}
+
+.token-preview-meta {
+  @apply flex flex-col items-center gap-0.5 text-center;
+}
+
+.token-preview-title {
+  @apply text-sm font-semibold text-slate-100;
+}
+
+.token-preview-symbol {
+  @apply text-xs text-slate-400;
+}
+
+.token-preview-address {
+  @apply text-[11px] font-mono text-slate-500 break-all;
+}
+
+/* Search match banner - states which kind of match was performed */
+.match-banner {
+  @apply flex flex-col gap-0.5 px-4 py-3 rounded-xl text-sm;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.match-banner-title {
+  @apply font-semibold text-slate-100;
+}
+
+.match-banner-body {
+  @apply text-xs text-slate-400;
+}
+
+.match-banner-ok {
+  background: rgba(6, 78, 59, 0.35);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.match-banner-ok .match-banner-title {
+  @apply text-emerald-300;
+}
+
+.match-banner-warn {
+  background: rgba(120, 53, 15, 0.3);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.match-banner-warn .match-banner-title {
+  @apply text-amber-300;
+}
+
+/* Status strip above the data-source badge */
+.status-strip {
+  @apply mt-4 flex items-center justify-center gap-3 text-xs text-slate-500;
+}
+
+/* Data source badge */
+.data-source-badge {
+  @apply mt-6 text-center text-xs;
+}
+
+.data-source-badge span {
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-medium;
+}
+
+/* Responsive table - sticky token column */
+@media (min-width: 1024px) {
+  .token-cell-sticky {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background: inherit;
+  }
+}
+
+/* Loading spinner dark */
+.loading-spinner {
+  @apply flex flex-col items-center justify-center py-16 gap-4;
+}
+
+.loading-spinner-ring {
+  @apply w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin;
+}
+
+.loading-spinner-pulse {
+  @apply absolute inset-0 border-4 border-blue-900/50 rounded-full animate-ping opacity-75;
+}
+
+/* Empty state */
+.empty-state {
+  @apply text-center py-16 text-slate-500;
+}
+
+/* Error state */
+.error-state {
+  @apply flex flex-col items-center justify-center py-16 px-4 text-center;
+}
+
+.error-icon {
+  @apply w-16 h-16 rounded-full bg-red-900/50 flex items-center justify-center mb-4;
+}

@@ -1,0 +1,21 @@
+{
+  "name": "robinhood-dex-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend API for the Robinhood Chain DEX dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "ethers": "^6.17.0",
+    "express": "^4.21.0",
+    "node-cache": "^5.1.2"
+  }
+}
