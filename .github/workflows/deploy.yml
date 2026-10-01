@@ -1,0 +1,131 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect changed folders
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need previous commit to diff
+
+      - name: Detect changes
+        id: changes
+        run: |
+          set -e
+          # For workflow_dispatch (no previous commit), default to "all changed"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=true"  >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Files changed in this push
+          CHANGED=$(git diff --name-only HEAD~1 HEAD || true)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qE '^backend/'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if echo "$CHANGED" | grep -qE '^frontend/'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: Deploy on EC2
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.EC2_PORT || 22 }}" -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ${{ secrets.EC2_USER }}
+          PORT: ${{ secrets.EC2_PORT || 22 }}
+          BACKEND_CHANGED: ${{ needs.detect-changes.outputs.backend }}
+          FRONTEND_CHANGED: ${{ needs.detect-changes.outputs.frontend }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$PORT" -o StrictHostKeyChecking=yes "$USER@$HOST" \
+            "BACKEND_CHANGED=$BACKEND_CHANGED FRONTEND_CHANGED=$FRONTEND_CHANGED bash -s" << 'EOF'
+            set -euo pipefail
+
+            echo "==> Pulling latest code"
+            cd ~/dexscreener
+            git fetch --all --prune
+            git reset --hard origin/main
+
+            # ---------------- BACKEND ----------------
+            if [ "${BACKEND_CHANGED}" = "true" ]; then
+              echo "==> [backend] changes detected"
+              cd ~/dexscreener/backend
+
+              if [ -f package-lock.json ]; then
+                npm ci --omit=dev || npm install --omit=dev
+              else
+                npm install --omit=dev
+              fi
+
+              echo "==> [backend] restarting PM2"
+              pm2 reload dexscreener_server || pm2 restart dexscreener_server
+              pm2 save
+
+              sleep 2
+              curl -fsS http://127.0.0.1:3532/api/health >/dev/null && echo "[backend] health OK"
+            else
+              echo "==> [backend] no changes, skipping"
+            fi
+
+            # ---------------- FRONTEND ----------------
+            if [ "${FRONTEND_CHANGED}" = "true" ]; then
+              echo "==> [frontend] changes detected"
+              cd ~/dexscreener/frontend
+
+              if [ -f package-lock.json ]; then
+                npm ci
+              else
+                npm install
+              fi
+
+              npm run build
+
+              echo "==> [frontend] restarting PM2"
+              pm2 reload dexscreener_frontend || pm2 restart dexscreener_frontend
+              pm2 save
+
+              sleep 2
+              curl -fsS -o /dev/null http://127.0.0.1:5173/ && echo "[frontend] health OK"
+            else
+              echo "==> [frontend] no changes, skipping"
+            fi
+
+            echo "==> Deploy complete"
+          EOF
