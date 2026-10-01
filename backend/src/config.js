@@ -1,19 +1,4 @@
-// Runtime configuration for the backend server.
-//
-// Every value is overridable via environment variables so the server can run
-// unchanged in local dev, CI and production.
-//
-// ENVIRONMENT MODEL
-// ------------------
-// NODE_ENV selects the environment; it defaults to 'development' because this
-// service is developed against free, rate-limited public APIs and the whole
-// point of a dev run is to see what it is doing. That default is what makes a
-// bare `node server.js` observable without any env file at all.
-//
-// One logging level, deliberately simple: a single line per request
-// (timestamp, method, path, status, duration, CACHE=HIT|MISS when applicable).
-// Cheap, safe, appropriate in every environment. There is no detailed mode, so
-// there is nothing for a misconfigured deploy to leak.
+
 
 import { fileURLToPath } from 'url';
 
