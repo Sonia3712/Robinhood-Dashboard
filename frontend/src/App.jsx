@@ -1,5 +1,3 @@
-
-
 import { useState, useCallback, useMemo } from 'react';
 import { Search, TrendingUp, ListFilter } from 'lucide-react';
 import { useNewPools, useTrendingPools, useHighVolumePools, usePoolList } from './hooks/usePools';
@@ -9,7 +7,6 @@ import SearchBar from './components/SearchBar';
 import SearchResults from './components/SearchResults';
 import TrendingSection from './components/TrendingSection';
 import DataSourceBadge from './components/DataSourceBadge';
-
 
 const TABS = [
   { id: 'new', label: 'New Pools', icon: Search },
@@ -41,12 +38,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('new');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // One query per tab, each enabled only while its tab is visible.
   const newPoolsQuery = useNewPools({ enabled: activeTab === 'new' });
   const trendingQuery = useTrendingPools({ enabled: activeTab === 'trending' });
   const highVolumeQuery = useHighVolumePools({ enabled: activeTab === 'volume' });
 
-  
   const searchQueryResult = useSearch(searchQuery);
 
   const isSearching = searchQuery.trim().length > 0;
@@ -68,7 +63,6 @@ export default function App() {
     volume: highVolumePools,
   };
 
-  
   const activeQuery =
     activeTab === 'new' ? newPoolsQuery : activeTab === 'trending' ? trendingQuery : highVolumeQuery;
 
@@ -76,7 +70,6 @@ export default function App() {
 
   const lastUpdated = activeQuery.dataUpdatedAt || 0;
 
-  
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
     setSearchQuery('');
@@ -99,8 +92,6 @@ export default function App() {
               </h1>
             </div>
 
-            {/* Single-chain dashboard. The control is informational, not a
-                cross-chain switch, so it does not pretend to filter anything. */}
             <div className="flex items-center gap-2">
               <span
                 className="select-dark flex items-center gap-2 cursor-default"
@@ -126,8 +117,7 @@ export default function App() {
             <ul className="flex overflow-x-auto gap-1" role="tablist">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
-                // Suppressed while search results are on screen, so no ranking
-                // is implied to be active.
+
                 const isActive = !isSearching && activeTab === tab.id;
                 return (
                   <li key={tab.id} role="presentation">
@@ -234,3 +224,8 @@ export default function App() {
     </div>
   );
 }
+
+
+
+
+

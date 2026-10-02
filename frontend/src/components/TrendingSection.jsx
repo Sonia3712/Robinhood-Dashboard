@@ -1,8 +1,3 @@
-// Trending pools section.
-//
-// "Load More" appends the next page; it used to be wired to the page state and
-// replaced the list instead. The retry button is now the query's own refetch
-// rather than a page increment.
 import PoolTable from './PoolTable';
 
 export default function TrendingSection({

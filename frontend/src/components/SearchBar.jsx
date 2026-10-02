@@ -1,10 +1,3 @@
-// Search bar - controlled input, dark theme.
-//
-// The debounce lives in `useSearch`, not here. This component used to keep its
-// own `localValue` mirror and call `onChange` on every keystroke while also
-// debouncing `onSearch`, so the parent state changed per character and the
-// debounce never actually prevented a request.
-
 import { Search, X } from 'lucide-react';
 
 export default function SearchBar({

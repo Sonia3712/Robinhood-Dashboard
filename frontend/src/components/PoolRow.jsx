@@ -1,12 +1,3 @@
-// Pool row - dense DEX Screener / GeckoTerminal style.
-//
-// Reads the single canonical pool shape produced by the backend:
-//   { poolAddress, dex:{id,name}, baseToken:{address,symbol,name,iconUrl},
-//     priceUsd, marketCap, fdv, liquidityUsd, volume:{m5,m1,h6,h24},
-//     priceChange:{m5,m1,h6,h24}, txns:{...}, traders, age }
-//
-// Missing values arrive as null and render as "—". Nothing is invented here.
-
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
@@ -48,12 +39,6 @@ function PriceChangeCell({ value }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// icons
-// ---------------------------------------------------------------------------
-
-// Deterministic colour from the symbol so the letter fallback is stable per
-// token, and never the same circle for every row.
 function fallbackColor(symbol) {
   if (!symbol) return 'bg-slate-600';
   let hash = 0;
@@ -112,8 +97,6 @@ function NetworkIcon({ size = 24 }) {
   );
 }
 
-// Per-DEX branding comes from the provider's own logo when it exposes one,
-// otherwise a neutral monogram of the DEX name.
 function DexIcon({ dex, size = 24 }) {
   const name = dex?.name || dex?.id || null;
   const display = name || 'Unknown DEX';
@@ -141,10 +124,6 @@ function hashHue(value) {
   return `hsl(${hash} 55% 42%)`;
 }
 
-// ---------------------------------------------------------------------------
-// row
-// ---------------------------------------------------------------------------
-
 function shortAddress(address) {
   if (!address) return '';
   return address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
@@ -160,7 +139,6 @@ export default function PoolRow({ pool, index }) {
   const quoteSymbol = quote.symbol || null;
   const baseName = base.name || baseSymbol || 'Unknown token';
 
-  // Fall back to the pair label when the provider gave us no symbols at all.
   const hasSymbols = Boolean(baseSymbol || quoteSymbol);
   const pairLabel = hasSymbols
     ? `${baseSymbol || '?'} / ${quoteSymbol || '?'}`

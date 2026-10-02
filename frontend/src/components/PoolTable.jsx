@@ -1,4 +1,3 @@
-// Pool table - dense DEX Screener / GeckoTerminal style.
 import PoolRow from './PoolRow';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
@@ -13,8 +12,7 @@ export default function PoolTable({
   isRefreshing = false,
   emptyMessage = 'No pools found',
 }) {
-  // A background poll must not tear the table down and replace it with a
-  // spinner; only the first load does that.
+
   if (isLoading) return <LoadingSpinner />;
 
   if (isError) {

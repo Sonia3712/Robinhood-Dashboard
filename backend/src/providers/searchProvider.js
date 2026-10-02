@@ -1,12 +1,8 @@
-
-
 import { geckoTerminalClient } from '../services/geckoTerminal.js';
 import { dexScreenerClient } from '../services/dexScreener.js';
 import { rpcClient } from '../services/robinhoodRpc.js';
 import { createCache, fetchCached } from '../utils/cache.js';
-
-const searchCache = createCache();
-import { withTimeout } from '../utils/timeout.js';
+import { withTimeout } from '../utils/rateLimiter.js';
 import {
   NETWORK,
   normalizeToken,
@@ -16,6 +12,8 @@ import {
   sortPoolsByVolumeDesc,
   toLowerCaseAddress,
 } from '../utils/normalize.js';
+
+const searchCache = createCache();
 
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const PROVIDER_TIMEOUT_MS = 10_000;
@@ -32,8 +30,6 @@ export async function search(rawQuery) {
     return emptyResult('', 'empty');
   }
 
-  // Feature + query + network, so "search:USDC" can never be served from the
-  // "search:<address>" entry or vice versa.
   const key = `${isAddressQuery(query) ? 'addr' : 'name'}:${query.toLowerCase()}:${NETWORK}`;
 
   return fetchCached(searchCache, key, async () => {
@@ -41,14 +37,9 @@ export async function search(rawQuery) {
   }, TTL);
 }
 
-// ---------------------------------------------------------------------------
-// address
-// ---------------------------------------------------------------------------
-
 async function searchByAddress(query) {
   const address = toLowerCaseAddress(query);
 
-  // The abortable form: the signal must exist before the call starts.
   const [gecko, dex, onChain] = await Promise.allSettled([
     withTimeout(() => geckoTerminalClient.getPoolsForToken(address), PROVIDER_TIMEOUT_MS, 'GeckoTerminal'),
     withTimeout(() => searchDexByExactAddress(address), PROVIDER_TIMEOUT_MS, 'DEX Screener'),
@@ -62,7 +53,6 @@ async function searchByAddress(query) {
 
   const verifiedOnChain = onChain.status === 'fulfilled' ? onChain.value === true : false;
 
-  // The searched token is always part of the token list, even with no pools.
   const tokens = await collectTokens(address, pools, verifiedOnChain);
 
   return {
@@ -75,7 +65,6 @@ async function searchByAddress(query) {
     sources: describeSources(gecko, dex, onChain),
   };
 }
-
 
 async function searchDexByExactAddress(address) {
   const pairs = await dexScreenerClient.search(address, { chain: NETWORK });
@@ -98,8 +87,6 @@ async function collectTokens(address, pools, verifiedOnChain) {
 
   if (fromPools.length > 0) return deduplicateTokens(fromPools);
 
-  // No pools — fall back to on-chain metadata so the address can still be shown
-  // (and marked unverified if it has no code).
   if (!verifiedOnChain) return [];
 
   try {
@@ -111,10 +98,6 @@ async function collectTokens(address, pools, verifiedOnChain) {
     return [];
   }
 }
-
-// ---------------------------------------------------------------------------
-// text
-// ---------------------------------------------------------------------------
 
 async function searchByText(query) {
   const [gecko, dex] = await Promise.allSettled([
@@ -138,7 +121,6 @@ async function searchByText(query) {
     sources: describeSources(gecko, dex, null),
   };
 }
-
 
 function filterToMatch(pools, query) {
   if (!Array.isArray(pools) || pools.length === 0) return [];
@@ -169,10 +151,6 @@ function collectPoolTokens(pools) {
   return tokens;
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
 function fulfilled(result) {
   if (result?.status !== 'fulfilled') {
     if (result?.status === 'rejected') {
@@ -183,7 +161,6 @@ function fulfilled(result) {
   return Array.isArray(result.value) ? result.value : [];
 }
 
-// Merge by chainId + lowercase pool address, keeping the richer record.
 function mergePoolSets(sets) {
   const merged = new Map();
 

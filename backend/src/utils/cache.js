@@ -1,12 +1,19 @@
-
 import NodeCache from 'node-cache';
-import { recordCacheEvent } from './requestContext.js';
 
 const DEFAULT_TTL_MS = 60_000;
 
-// Every instance, so shutdown can stop node-cache's sweep timers.
 const registry = new Set();
 
+let currentContext = null;
+
+export function setRequestContext(context) {
+  currentContext = context;
+}
+
+function recordCacheEvent(key, outcome) {
+  if (!currentContext) return;
+  currentContext.cacheEvents.push({ key, outcome });
+}
 
 export function createCache() {
   const cache = new NodeCache({ useClones: false, stdTTL: 0, checkperiod: 600 });
@@ -47,7 +54,6 @@ export async function fetchCached(cache, key, fetcher, ttlMs = DEFAULT_TTL_MS, s
   return promise;
 }
 
-/** Read past the TTL, but inside the stale grace period. Null if absent. */
 export function readStale(cache, key) {
   const entry = cache.get(key);
   if (!entry) return null;
@@ -55,7 +61,6 @@ export function readStale(cache, key) {
   return entry.value;
 }
 
-/** Stop every sweep timer. Called from the shutdown path. */
 export function closeAllCaches() {
   for (const cache of registry) {
     cache.pending.clear();
@@ -67,8 +72,7 @@ export function closeAllCaches() {
 function write(cache, key, value, ttlMs, staleMs) {
   const lifetimeMs = ttlMs + staleMs;
   if (!(lifetimeMs > 0)) {
-    // node-cache reads ttl <= 0 as "never expire", so drop the key outright
-    // rather than storing something immortal by accident.
+
     cache.del(key);
     return value;
   }

@@ -37,17 +37,16 @@ body {
   .text-gradient {
     @apply bg-gradient-to-r from-slate-300 to-blue-400 bg-clip-text text-transparent;
   }
-  
+
   .glass {
     @apply bg-slate-900/80 backdrop-blur-sm border border-slate-700/50;
   }
-  
+
   .card-hover {
     @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
   }
 }
 
-/* Dark table styles */
 .table-container {
   @apply bg-slate-900/90 border border-slate-700/50 rounded-lg overflow-hidden;
   overflow-y: auto;
@@ -86,7 +85,6 @@ body {
   @apply text-center;
 }
 
-/* Token column styles */
 .token-cell {
   @apply max-w-md min-w-[200px];
 }
@@ -99,13 +97,10 @@ body {
   @apply flex items-center gap-1 flex-shrink-0;
 }
 
-/* Individual icon styles */
 .token-icon {
   @apply rounded-full object-cover border border-slate-600 flex-shrink-0;
 }
 
-/* Clickable wrapper for the base token icon. Fixed size so opening the preview
-   cannot resize the row, and no scale/hover transform. */
 .token-icon-button {
   @apply flex-shrink-0 rounded-full cursor-zoom-in bg-transparent p-0 border-0;
   line-height: 0;
@@ -147,12 +142,10 @@ body {
   @apply text-xs text-slate-500 truncate;
 }
 
-/* Compact DEX label inline */
 .token-dex-label {
   @apply text-[10px] text-slate-500 font-medium px-1.5 py-0.5 bg-slate-800 rounded whitespace-nowrap flex-shrink-0;
 }
 
-/* Color utilities for price changes */
 .price-up {
   @apply text-green-400;
 }
@@ -165,7 +158,6 @@ body {
   @apply text-slate-500;
 }
 
-/* Compact number formatting */
 .compact-number {
   @apply font-mono text-slate-200;
 }
@@ -174,12 +166,10 @@ body {
   @apply font-mono text-slate-500;
 }
 
-/* Search bar dark style */
 .search-input {
   @apply w-full pl-10 pr-10 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200;
 }
 
-/* Tab styles */
 .tab-button {
   @apply flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap;
 }
@@ -192,7 +182,6 @@ body {
   @apply border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/50;
 }
 
-/* Toolbar */
 .toolbar {
   @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 border-b border-slate-700/50;
 }
@@ -201,12 +190,10 @@ body {
   @apply flex items-center gap-2 flex-wrap;
 }
 
-/* Select dark style - base styles without custom background image */
 .select-dark {
   @apply px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 appearance-none pr-10;
 }
 
-/* Badge colors */
 .badge-dex {
   @apply bg-blue-900/50 text-blue-400;
 }
@@ -227,14 +214,11 @@ body {
   @apply bg-emerald-900/50 text-emerald-400;
 }
 
-/* Dim the table slightly while a background poll is in flight. The rows stay
-   mounted and the header stays put. */
 .table-container.is-refreshing tbody {
   opacity: 0.6;
   transition: opacity 120ms ease-out;
 }
 
-/* Token image preview - portalled to <body> so table overflow never clips it */
 .token-preview-overlay {
   @apply fixed inset-0 z-50 flex items-center justify-center p-4;
   background: rgba(2, 6, 23, 0.82);
@@ -276,7 +260,6 @@ body {
   @apply text-[11px] font-mono text-slate-500 break-all;
 }
 
-/* Search match banner - states which kind of match was performed */
 .match-banner {
   @apply flex flex-col gap-0.5 px-4 py-3 rounded-xl text-sm;
   background: rgba(30, 41, 59, 0.7);
@@ -309,12 +292,10 @@ body {
   @apply text-amber-300;
 }
 
-/* Status strip above the data-source badge */
 .status-strip {
   @apply mt-4 flex items-center justify-center gap-3 text-xs text-slate-500;
 }
 
-/* Data source badge */
 .data-source-badge {
   @apply mt-6 text-center text-xs;
 }
@@ -323,7 +304,6 @@ body {
   @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-medium;
 }
 
-/* Responsive table - sticky token column */
 @media (min-width: 1024px) {
   .token-cell-sticky {
     position: sticky;
@@ -333,7 +313,6 @@ body {
   }
 }
 
-/* Loading spinner dark */
 .loading-spinner {
   @apply flex flex-col items-center justify-center py-16 gap-4;
 }
@@ -346,12 +325,10 @@ body {
   @apply absolute inset-0 border-4 border-blue-900/50 rounded-full animate-ping opacity-75;
 }
 
-/* Empty state */
 .empty-state {
   @apply text-center py-16 text-slate-500;
 }
 
-/* Error state */
 .error-state {
   @apply flex flex-col items-center justify-center py-16 px-4 text-center;
 }

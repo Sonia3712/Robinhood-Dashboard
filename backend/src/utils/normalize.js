@@ -1,19 +1,9 @@
-// Canonical data shapes for the whole backend.
-//
-// Every provider (GeckoTerminal, DEX Screener, Robinhood RPC) is adapted into
-// the structures built here, so the routes and the frontend only ever deal with
-// one field layout. Previously each provider emitted its own shape and
-// PoolRow.jsx had to read three of them at once, which is why DEX Screener rows
-// lost their DEX name, transaction count and every short-window price change.
-
 import config from '../config.js';
 
 export const NETWORK = config.network;
 export const CHAIN_ID = config.chainId;
 
-// Time windows the table displays.
 export const WINDOWS = ['m5', 'm1', 'h6', 'h24'];
-
 
 export function num(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -37,8 +27,6 @@ export function toLowerCaseAddress(address) {
   return trimmed ? trimmed.toLowerCase() : null;
 }
 
-// Token identity is chainId + lowercase address. A bare address is ambiguous
-// once more than one chain is in play.
 export function getUniqueTokenKey(token) {
   return `${token?.chainId ?? CHAIN_ID}:${toLowerCaseAddress(token?.address) ?? ''}`;
 }
@@ -47,10 +35,6 @@ export function getUniquePoolKey(pool) {
   return `${pool?.chainId ?? CHAIN_ID}:${toLowerCaseAddress(pool?.poolAddress) ?? ''}`;
 }
 
-// ---------------------------------------------------------------------------
-// time
-// ---------------------------------------------------------------------------
-
 export function calculateAgeSeconds(createdAt) {
   if (!createdAt) return null;
   const created = new Date(createdAt);
@@ -58,7 +42,6 @@ export function calculateAgeSeconds(createdAt) {
   return Math.max(0, Math.floor((Date.now() - created.getTime()) / 1000));
 }
 
-// "30s" / "2m" / "5m" / "2h" / "1d"
 export function formatAge(createdAt) {
   if (!createdAt) return null;
 
@@ -81,12 +64,6 @@ export function formatAge(createdAt) {
   return `${months}mo`;
 }
 
-// ---------------------------------------------------------------------------
-// canonical tokens and pools
-// ---------------------------------------------------------------------------
-
-// Missing symbol/name stay null. The UI decides how to render "unknown"; the
-// backend must not invent a placeholder that then looks like real data.
 export function normalizeTokenRef(token) {
   if (!token) return { address: null, symbol: null, name: null, iconUrl: null, decimals: null };
   return {
@@ -133,10 +110,6 @@ function txnsOf(value) {
   return { buys, sells };
 }
 
-/**
- * Build the single pool shape every provider is adapted into.
- * Only these fields leave the backend; provider payloads are never forwarded.
- */
 export function makePool(input) {
   const poolCreatedAt = input.poolCreatedAt || null;
   const base = normalizeTokenRef(input.baseToken);
@@ -169,8 +142,6 @@ export function makePool(input) {
     priceChange: windowSeries((w) => num(input.priceChange?.[w])),
     txns: windowSeries((w) => txnsOf(input.txns?.[w])),
 
-    // Unique traders. GeckoTerminal reports buyers/sellers; DEX Screener does
-    // not, so this stays null there instead of being faked as 0.
     traders: int(input.traders),
 
     sources: Array.from(new Set(input.sources || [])).filter(Boolean),
@@ -212,8 +183,6 @@ export function deduplicateTokens(tokens) {
   return Array.from(seen.values());
 }
 
-// Keep whichever side carries more information. GeckoTerminal is the pool
-// index of record; DEX Screener contributes icons and per-token detail.
 export function mergePoolData(a, b) {
   if (!a) return b;
   if (!b) return a;

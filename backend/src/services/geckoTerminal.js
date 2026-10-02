@@ -1,10 +1,5 @@
-
-
 import { apiRateLimiter } from '../utils/rateLimiter.js';
 import { createCache, fetchCached, readStale } from '../utils/cache.js';
-
-const poolCache = createCache();
-const tokenCache = createCache();
 import { requestJson } from './httpClient.js';
 import {
   NETWORK,
@@ -17,26 +12,26 @@ import {
 } from '../utils/normalize.js';
 import config from '../config.js';
 
+const poolCache = createCache();
+const tokenCache = createCache();
+
 const API_BASE = config.geckoTerminalBaseUrl;
 const NETWORK_BASE = `${API_BASE}/networks/${NETWORK}`;
 
-// Pulls token + dex side-data into the same payload.
 const INCLUDE_POOL_RELATIONS = 'base_token,quote_token,dex';
 
-// Free tier is roughly 30 calls/minute, so list responses are cached generously.
 const TTL_NEW = 45_000;
 const TTL_TRENDING = 120_000;
 const TTL_VOLUME = 60_000;
 const TTL_DETAIL = 60_000;
 const TTL_SEARCH = 300_000;
 
-
 const STALE_GRACE = 15 * 60_000;
 
 class GeckoTerminalClient {
   async request(url, { signal } = {}) {
     return apiRateLimiter.execute(async (rateLimitSignal) => {
-      // A caller-supplied signal (request timeout) should win over the limiter's.
+
       return requestJson(url, {
         signal: signal ?? rateLimitSignal,
         headers: { Accept: 'application/json' },
@@ -53,10 +48,6 @@ class GeckoTerminalClient {
     return url.toString();
   }
 
-  // -------------------------------------------------------------------------
-  // list endpoints
-  // -------------------------------------------------------------------------
-
   async getNewPools(page = 1) {
     return this.#list('new', this.#url(NETWORK_BASE, '/new_pools', {
       page,
@@ -65,8 +56,7 @@ class GeckoTerminalClient {
   }
 
   async getTrendingPools(page = 1) {
-    // The provider's own trending ranking. Deliberately NOT the volume sort —
-    // that is what getTopPoolsByVolume does, and the two must stay independent.
+
     return this.#list('trending', this.#url(NETWORK_BASE, '/trending_pools', {
       page,
       include: INCLUDE_POOL_RELATIONS,
@@ -81,8 +71,6 @@ class GeckoTerminalClient {
     }), TTL_VOLUME);
   }
 
-  // Shared list handling: namespaced cache key, network filter, normalization.
-  // Providers already rank these lists, so the default is to preserve order.
   async #list(feature, url, ttlMs, sort = (pools) => pools) {
     const key = `${feature}:${NETWORK}:${url}`;
 
@@ -92,8 +80,6 @@ class GeckoTerminalClient {
         return sort(this.#toPools(data));
       }, ttlMs, STALE_GRACE);
 
-      // Refresh the stale window on every read, so an actively-polled list stays
-      // recoverable for STALE_GRACE after its TTL lapses.
       poolCache.set(key, { value, expiresAt: Date.now() + ttlMs }, (ttlMs + STALE_GRACE) / 1000);
       return value;
     } catch (error) {
@@ -102,10 +88,6 @@ class GeckoTerminalClient {
       throw error;
     }
   }
-
-  // -------------------------------------------------------------------------
-  // detail endpoints
-  // -------------------------------------------------------------------------
 
   async getPool(poolAddress) {
     const address = toLowerCaseAddress(poolAddress);
@@ -123,7 +105,7 @@ class GeckoTerminalClient {
         return pool ?? null;
       }, TTL_DETAIL);
     } catch (error) {
-      // 404 means "this pool is not indexed" — that is an answer, not a failure.
+
       if (error?.status === 404) return null;
       const stale = readStale(poolCache, key);
       if (stale) return stale;
@@ -131,7 +113,6 @@ class GeckoTerminalClient {
     }
   }
 
-  // Pools where the token is the base OR the quote side. One request, no fan-out.
   async getPoolsForToken(tokenAddress) {
     const address = toLowerCaseAddress(tokenAddress);
     if (!address) return [];
@@ -178,13 +159,6 @@ class GeckoTerminalClient {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // search
-  // -------------------------------------------------------------------------
-
-  // NOTE: this is an API-root endpoint. The old code requested
-  // /networks/robinhood/search/tokens, which is a 404, so GeckoTerminal
-  // contributed nothing to every text search.
   async searchPools(query) {
     const trimmed = String(query || '').trim();
     if (!trimmed) return [];
@@ -198,7 +172,7 @@ class GeckoTerminalClient {
     try {
       return await fetchCached(tokenCache, key, async () => {
         const data = await this.request(url);
-        // The endpoint is global; keep only this network's pools.
+
         return sortPoolsByVolumeDesc(this.#toPools(data, { networkScoped: false }));
       }, TTL_SEARCH);
     } catch (error) {
@@ -207,10 +181,6 @@ class GeckoTerminalClient {
       return [];
     }
   }
-
-  // -------------------------------------------------------------------------
-  // parsing
-  // -------------------------------------------------------------------------
 
   #toPools(payload, { networkScoped = true } = {}) {
     const rows = Array.isArray(payload?.data) ? payload.data : [];
@@ -237,8 +207,6 @@ class GeckoTerminalClient {
     const quoteIncluded = quoteRefId ? included.get(quoteRefId) : null;
     const dexIncluded = dexRefId ? included.get(dexRefId) : null;
 
-    // Fall back to the pool's display name ("USDG / WETH 0.01%") when the
-    // `included` side-data is unavailable, so symbols are never needlessly lost.
     const nameFallback = splitPoolName(attributes.name);
 
     const baseAttributes = baseIncluded?.attributes ?? {};
@@ -288,10 +256,6 @@ class GeckoTerminalClient {
   }
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
 const PICKED_WINDOWS = { m5: 'm5', m1: 'h1', h6: 'h6', h24: 'h24' };
 
 function pickWindows(source) {
@@ -302,9 +266,6 @@ function pickWindows(source) {
   return out;
 }
 
-// DEX Screener-style "traders" is a count of distinct addresses. GeckoTerminal
-// reports buyers and sellers per window; buyers is the closer analogue. Left
-// null when the upstream does not report it, never defaulted to 0.
 function pickTraders(window) {
   const buyers = int(window?.buyers);
   if (buyers !== null) return buyers;
@@ -330,7 +291,6 @@ function stripNetworkPrefix(refId) {
   return refId.startsWith(prefix) ? refId.slice(prefix.length) : refId;
 }
 
-// "USDG / WETH 0.01%" -> { base: 'USDG', quote: 'WETH' }
 function splitPoolName(name) {
   if (typeof name !== 'string' || !name.includes('/')) return { base: null, quote: null };
   const [rawBase, ...rest] = name.split('/');

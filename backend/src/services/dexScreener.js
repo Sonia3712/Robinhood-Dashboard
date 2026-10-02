@@ -1,19 +1,16 @@
-
-
 import { apiRateLimiter } from '../utils/rateLimiter.js';
 import { createCache, fetchCached, readStale } from '../utils/cache.js';
-
-const dexScreenerCache = createCache();
 import { requestJson } from './httpClient.js';
 import {
   NETWORK,
   makePool,
   num,
   toLowerCaseAddress,
-  sortPoolsByVolumeDesc,
   deduplicatePools,
 } from '../utils/normalize.js';
 import config from '../config.js';
+
+const dexScreenerCache = createCache();
 
 const BASE_URL = config.dexScreenerBaseUrl;
 
@@ -39,7 +36,6 @@ class DexScreenerClient {
     return url.toString();
   }
 
-  
   async search(query, { chain = NETWORK } = {}) {
     const trimmed = String(query || '').trim();
     if (!trimmed) return [];
@@ -53,8 +49,7 @@ class DexScreenerClient {
         const data = await this.request(url);
         return Array.isArray(data?.pairs) ? data.pairs : [];
       }, TTL_SEARCH);
-      // Refresh the stale window on every read, so an actively-searched term
-      // stays recoverable for STALE_GRACE after its TTL lapses.
+
       dexScreenerCache.set(
         key,
         { value: raw, expiresAt: Date.now() + TTL_SEARCH },
@@ -94,12 +89,10 @@ class DexScreenerClient {
     return pool ?? null;
   }
 
-  
-
   #normalizeAll(pairs, { chain }) {
     return deduplicatePools(
       (Array.isArray(pairs) ? pairs : [])
-        // Hard chain filter. Never let Ethereum/Base/BSC/Solana rows through.
+
         .filter((pair) => pair?.chainId === chain)
         .map((pair) => this.#toPool(pair))
         .filter((pool) => pool.poolAddress !== null),
@@ -109,9 +102,6 @@ class DexScreenerClient {
   #toPool(pair) {
     const info = pair.info ?? null;
 
-    // DEX Screener publishes one image per *pair*, not per token. Use it for
-    // the base side so rows are visually distinct; leave the quote side null
-    // rather than pointing two tokens at the same picture.
     const pairImage = firstImage(info);
 
     return makePool({
@@ -158,7 +148,7 @@ class DexScreenerClient {
         h6: pair.txns?.h6,
         h24: pair.txns?.h24,
       },
-      // DEX Screener does not report unique traders.
+
       traders: null,
       url: pair.url ?? null,
       sources: ['dexscreener'],
@@ -172,7 +162,6 @@ function firstImage(info) {
   return info.imageUrl || info.openGraph || null;
 }
 
-// pairCreatedAt is a unix timestamp in milliseconds.
 function normalizeTimestamp(value) {
   const parsed = num(value);
   if (parsed === null) return null;
@@ -191,5 +180,3 @@ function prettifyDexId(dexId) {
 
 export const dexScreenerClient = new DexScreenerClient();
 export default dexScreenerClient;
-
-export { sortPoolsByVolumeDesc };

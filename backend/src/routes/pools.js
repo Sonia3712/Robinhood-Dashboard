@@ -10,8 +10,6 @@ import { readNetwork, readPage, isSupportedNetwork } from '../utils/parseQuery.j
 
 const router = Router();
 
-// Each feature is its own GeckoTerminal endpoint with its own cache key and
-// TTL. They are registered from one table so a new list is one line here.
 const LISTS = {
   new: { handler: getNewPools, feature: 'new-pools' },
   trending: { handler: getTrendingPools, feature: 'trending' },
@@ -33,9 +31,7 @@ for (const [path, { handler, feature }] of Object.entries(LISTS)) {
 
     try {
       const pools = await handler(page);
-      // `updatedAt` is the time this RESPONSE was assembled, not when the data
-      // was fetched. It is part of the response contract, so it is not moved
-      // into the cached payload.
+
       res.json({
         feature,
         network,
@@ -45,8 +41,7 @@ for (const [path, { handler, feature }] of Object.entries(LISTS)) {
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
-      // Upstream failure is not a client error. Report 502 so the frontend can
-      // distinguish "the provider is down" from "your request was wrong".
+
       console.error(`[POOLS] ${feature} error:`, error.message);
       res.status(502).json({
         error: `Failed to load ${feature} pools`,
@@ -60,7 +55,6 @@ for (const [path, { handler, feature }] of Object.entries(LISTS)) {
   });
 }
 
-// Pool detail by address.
 router.get('/:chainId/:poolAddress', async (req, res) => {
   const { chainId, poolAddress } = req.params;
 

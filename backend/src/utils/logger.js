@@ -1,7 +1,5 @@
-
 import config from '../config.js';
 
-// Only these are ever logged. Anything else in the query string is discarded.
 const SAFE_QUERY_PARAMS = ['network', 'page'];
 
 const MAX_VALUE_LENGTH = 160;
@@ -24,8 +22,6 @@ export function sanitizeUrl(originalUrl) {
   return query ? `${parsed.pathname}?${query}` : parsed.pathname;
 }
 
-
-
 function stamp(date) {
   return date.toISOString().slice(11, 23);
 }
@@ -34,14 +30,9 @@ export function logServer(message) {
   console.log(`[SERVER] ${message}`);
 }
 
-export function logWarn(scope, message) {
-  console.warn(`[${scope}] ${message}`);
-}
-
 export function logError(scope, message) {
   console.error(`[${scope}] ${message}`);
 }
-
 
 export function logRequest({ method, url, status, durationMs, cache }) {
   const cachePart = cache ? ` CACHE=${cache}` : '';

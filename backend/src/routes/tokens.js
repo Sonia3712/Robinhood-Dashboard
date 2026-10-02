@@ -5,7 +5,6 @@ import { isSupportedNetwork } from '../utils/parseQuery.js';
 
 const router = Router();
 
-// Token by address.
 router.get('/:chainId/:address', async (req, res) => {
   const { chainId, address } = req.params;
 
@@ -28,7 +27,6 @@ router.get('/:chainId/:address', async (req, res) => {
   }
 });
 
-// Search tokens by name / symbol.
 router.get('/', async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 

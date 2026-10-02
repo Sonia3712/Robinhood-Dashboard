@@ -1,14 +1,21 @@
+export function withTimeout(fn, ms, label) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
 
+  return Promise.race([Promise.resolve().then(fn), timeout]).finally(() => clearTimeout(timeoutId));
+}
 
 export class RateLimiter {
   constructor(options = {}) {
     this.name = options.name || 'api';
     this.maxConcurrent = options.maxConcurrent || 3;
     this.maxRetries = options.maxRetries || 3;
-    this.baseDelay = options.baseDelay || 1000; // 1 second
-    this.maxDelay = options.maxDelay || 30000; // 30 seconds
-    this.timeout = options.timeout || 10000; // 10 seconds
-    this.retryBudget = options.retryBudget ?? 3; // retries allowed per minute
+    this.baseDelay = options.baseDelay || 1000;
+    this.maxDelay = options.maxDelay || 30000;
+    this.timeout = options.timeout || 10000;
+    this.retryBudget = options.retryBudget ?? 3;
 
     this.running = 0;
     this.queue = [];
@@ -35,8 +42,6 @@ export class RateLimiter {
     }
   }
 
-  // Retries are rate limited too, otherwise a 429 storm turns into a retry storm
-  // and the upstream bans us for good.
   #consumeRetryBudget() {
     const now = Date.now();
     this.retryTimestamps = this.retryTimestamps.filter((t) => now - t < 60_000);
@@ -58,7 +63,7 @@ export class RateLimiter {
     let lastError;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      // Declared outside the try so the catch block can clear it too.
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -70,14 +75,13 @@ export class RateLimiter {
         lastError = error;
         clearTimeout(timeoutId);
 
-        // Don't retry on abort or client errors (4xx except 429)
         if (error?.name === 'AbortError') throw error;
         if (error?.status >= 400 && error?.status < 500 && error?.status !== 429) {
           throw error;
         }
 
         if (attempt < this.maxRetries && this.#consumeRetryBudget()) {
-          // Honour Retry-After when the upstream sends one, otherwise back off.
+
           const retryAfterMs = parseRetryAfter(error?.retryAfter);
           const delay = Math.min(
             retryAfterMs ?? this.baseDelay * 2 ** attempt + Math.random() * 500,
@@ -95,7 +99,6 @@ export class RateLimiter {
   }
 }
 
-// Retry-After is either seconds or an HTTP date.
 function parseRetryAfter(value) {
   if (value === undefined || value === null || value === '') return null;
 

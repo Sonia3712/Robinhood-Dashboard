@@ -1,4 +1,3 @@
-
 const API_PREFIX = '/api';
 
 const rawBase = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '');
@@ -29,7 +28,6 @@ async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Let a caller-supplied signal cancel the request too.
   if (signal) {
     if (signal.aborted) controller.abort();
     else signal.addEventListener('abort', () => controller.abort(), { once: true });
@@ -39,13 +37,13 @@ async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }
     const response = await fetch(url, { ...init, signal: controller.signal });
 
     if (!response.ok) {
-      // The backend returns a JSON error body; surface its detail when present.
+
       let detail = null;
       try {
         const body = await response.json();
         detail = body?.detail || body?.error || null;
       } catch {
-        // Body was empty or not JSON - the status still carries the meaning.
+
       }
       throw new ApiError(
         detail || `Request failed with status ${response.status}`,
@@ -60,7 +58,7 @@ async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }
     }
     throw error;
   } finally {
-    // Always clears, so no request can leave the UI stuck in a loading state.
+
     clearTimeout(timeoutId);
   }
 }

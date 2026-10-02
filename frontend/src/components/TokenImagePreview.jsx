@@ -1,10 +1,3 @@
-// Full-size preview for a token image.
-//
-// Rendered through a portal on document.body so it is never affected by the
-// table's overflow/sticky containers. Opening it does not touch the row: the
-// original small icon stays exactly where it is, the row does not resize, and
-// nothing scales on hover.
-
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
@@ -21,7 +14,7 @@ export default function TokenImagePreview({ token, onClose }) {
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    // Stop the page behind the overlay from scrolling while it is open.
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 

@@ -1,7 +1,3 @@
-// Search results - shows the trading pairs an address or name resolves to.
-//
-// The banner states which kind of match these are, so symbol results are never
-// presented as if they were results for the exact contract address.
 import PoolTable from './PoolTable';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorMessage from './ErrorMessage';

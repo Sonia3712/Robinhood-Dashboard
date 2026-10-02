@@ -1,5 +1,3 @@
-
-
 export function toLowerCaseAddress(address) {
   if (typeof address !== 'string') return null;
   const trimmed = address.trim();
@@ -48,8 +46,6 @@ export function formatTraders(value) {
   return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-// Prefers the backend's precomputed `age` (same timezone, already formatted)
-// and falls back to deriving it from a timestamp.
 export function formatAge(createdAt, precomputed) {
   if (typeof precomputed === 'string' && precomputed) return precomputed;
   if (!createdAt) return null;
@@ -81,14 +77,10 @@ export function formatPriceChange(value) {
   };
 }
 
-// Pool identity is chainId + lowercase pool address, so the same address on a
-// different chain can never be treated as the same pool.
 export function getUniquePoolKey(pool) {
   return `${pool?.chainId ?? ''}:${toLowerCaseAddress(pool?.poolAddress) ?? ''}`;
 }
 
-// Concatenate loaded pages and drop rows already present, which happens when two
-// pages of a moving ranking overlap.
 export function mergePools(pools) {
   const seen = new Map();
   for (const pool of pools) {

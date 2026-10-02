@@ -1,5 +1,3 @@
-
-
 import { geckoTerminalClient } from '../services/geckoTerminal.js';
 import { rpcClient } from '../services/robinhoodRpc.js';
 import {
@@ -9,9 +7,9 @@ import {
   toLowerCaseAddress,
 } from '../utils/normalize.js';
 import { createCache, fetchCached } from '../utils/cache.js';
+import { withTimeout } from '../utils/rateLimiter.js';
 
 const tokenCache = createCache();
-import { withTimeout } from '../utils/timeout.js';
 
 const TTL = 3600_000;
 
@@ -32,7 +30,6 @@ export async function getTokenByAddress(address) {
     const gt = indexed.status === 'fulfilled' ? indexed.value : null;
     const rpc = metadata.status === 'fulfilled' ? metadata.value : null;
 
-    // Neither source knows this address.
     if (!gt && !rpc && !verifiedOnChain) return null;
 
     const source = gt ? 'geckoterminal' : 'rpc';
@@ -51,24 +48,6 @@ export async function getTokenByAddress(address) {
     token.verifiedOnChain = verifiedOnChain;
     return token;
   }, TTL);
-}
-
-export async function getTokenBySymbol(symbol) {
-  const needle = String(symbol || '').trim().toLowerCase();
-  if (!needle) return [];
-
-  const pools = await geckoTerminalClient.searchPools(symbol);
-  const tokens = [];
-
-  for (const pool of pools) {
-    for (const token of [pool.baseToken, pool.quoteToken]) {
-      if (token?.symbol?.toLowerCase() === needle) {
-        tokens.push(normalizeToken(token, 'geckoterminal'));
-      }
-    }
-  }
-
-  return deduplicateTokens(tokens);
 }
 
 export async function searchTokens(query) {
@@ -95,12 +74,4 @@ export async function searchTokens(query) {
 
     return deduplicateTokens(tokens);
   }, 300_000);
-}
-
-export function verifyContract(address) {
-  return rpcClient.isContract(address);
-}
-
-export function getTokenMetadataFromRPC(address) {
-  return rpcClient.getTokenMetadata(address);
 }

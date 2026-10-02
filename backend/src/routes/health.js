@@ -3,8 +3,6 @@ import config from '../config.js';
 
 const router = Router();
 
-// Liveness + configuration. Intentionally does not call any provider, so a
-// rate-limited upstream can never make the dashboard look "down".
 router.get('/', (req, res) => {
   const body = {
     status: 'ok',
@@ -13,7 +11,7 @@ router.get('/', (req, res) => {
     env: config.nodeEnv,
     network: config.network,
     chainId: config.chainId,
-    refresh: 'polling',
+    refresh: 'websocket',
     providers: {
       geckoTerminal: config.geckoTerminalBaseUrl,
       dexScreener: config.dexScreenerBaseUrl,

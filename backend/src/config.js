@@ -1,31 +1,19 @@
-
-
 import { fileURLToPath } from 'url';
 
-const DEFAULTS = {
-  port: 3001,
-  host: '0.0.0.0',
-  network: 'robinhood',
-  chainId: 4663,
-  rpcUrl: 'https://robinhood-rpc.publicnode.com',
-  geckoTerminalBaseUrl: 'https://api.geckoterminal.com/api/v2',
-  dexScreenerBaseUrl: 'https://api.dexscreener.com/latest/dex',
-  // Development is the default so a fresh clone is debuggable with zero setup.
-  nodeEnv: 'development',
+const REQUIRED_TEXT_VARS = {
+  NODE_ENV: 'nodeEnv',
+  HOST: 'host',
+  NETWORK: 'network',
+  RPC_URL: 'rpcUrl',
+  GECKOTERMINAL_BASE_URL: 'geckoTerminalBaseUrl',
+  DEXSCREENER_BASE_URL: 'dexScreenerBaseUrl',
 };
 
-// Origins the browser is allowed to call the API from.
-const DEFAULT_CORS_ORIGINS = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-];
+const REQUIRED_NUM_VARS = ['PORT', 'CHAIN_ID'];
 
-// Env files are resolved relative to this module, not the working directory, so
-// `node backend/server.js` and `node server.js` behave identically.
 const ENV_LOCAL_PATH = fileURLToPath(new URL('../.env.local', import.meta.url));
 const ENV_PATH = fileURLToPath(new URL('../.env', import.meta.url));
 
-// Load env files if they exist. Node >= 20.12 can do this without a dependency.
 export function loadEnvFile(...paths) {
   if (typeof process.loadEnvFile !== 'function') return false;
 
@@ -43,11 +31,12 @@ export function loadEnvFile(...paths) {
 }
 
 function toList(value) {
-  if (value === undefined || value === null || value === '') return null;
-  return value
+  if (value === undefined || value === null) return null;
+  const list = value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
+  return list.length > 0 ? list : null;
 }
 
 function toBool(value, fallback) {
@@ -55,53 +44,38 @@ function toBool(value, fallback) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
-function toInt(value, fallback) {
-  if (value === undefined || value === null || value === '') return fallback;
+function toInt(value) {
+  if (value === undefined || value === null || value === '') return null;
   const parsed = Number.parseInt(value, 10);
-  // An absent value falls back to the default, but a present-and-unparseable
-  // one must surface as NaN so assertValidConfig rejects it. Silently turning
-  // `CHAIN_ID=abc` into 4663 is the exact failure this validation exists to stop.
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
 export function loadConfig(env = process.env) {
-  const corsOrigins = toList(env.CORS_ORIGINS) ?? DEFAULT_CORS_ORIGINS;
-  const nodeEnv = (env.NODE_ENV || '').trim() || DEFAULTS.nodeEnv;
-  const isDevelopment = nodeEnv === 'development';
+  const text = (name) => (env[name] || '').trim() || null;
+  const nodeEnv = text('NODE_ENV');
 
   return {
     nodeEnv,
-    isDevelopment,
-    port: toInt(env.PORT, DEFAULTS.port),
-    host: env.HOST || DEFAULTS.host,
-    network: env.NETWORK || DEFAULTS.network,
-    chainId: toInt(env.CHAIN_ID, DEFAULTS.chainId),
-    rpcUrl: env.RPC_URL || DEFAULTS.rpcUrl,
-    geckoTerminalBaseUrl: env.GECKOTERMINAL_BASE_URL || DEFAULTS.geckoTerminalBaseUrl,
-    dexScreenerBaseUrl: env.DEXSCREENER_BASE_URL || DEFAULTS.dexScreenerBaseUrl,
+    isDevelopment: nodeEnv === 'development',
 
-    // Compact access line. LOG_REQUESTS is read as a fallback so an existing
-    // shell environment keeps working after the rename.
+    port: toInt(env.PORT),
+    chainId: toInt(env.CHAIN_ID),
+
+    host: text('HOST'),
+    network: text('NETWORK'),
+    rpcUrl: text('RPC_URL'),
+    geckoTerminalBaseUrl: text('GECKOTERMINAL_BASE_URL'),
+    dexScreenerBaseUrl: text('DEXSCREENER_BASE_URL'),
+
+    corsOrigins: toList(env.CORS_ORIGINS) ?? [],
+    allowAllOrigins: (env.CORS_ORIGINS || '').trim() === '*',
+
     requestLog: toBool(env.REQUEST_LOG ?? env.LOG_REQUESTS, true),
-
-    // '*' disables origin checking entirely, which is handy for local testing.
-    corsOrigins,
-    allowAllOrigins: corsOrigins.includes('*'),
   };
 }
 
-function isAbsoluteHttpUrl(value) {
-  try {
-    const { protocol, hostname } = new URL(value);
-    return (protocol === 'http:' || protocol === 'https:') && Boolean(hostname);
-  } catch {
-    return false;
-  }
-}
-
-// JSON.stringify(NaN) is "null", which would hide the value the developer
-// actually typed.
 function show(value) {
+  if (value === null || value === undefined) return 'not set';
   if (typeof value === 'number' && Number.isNaN(value)) return 'not a number';
   return JSON.stringify(value);
 }
@@ -109,40 +83,23 @@ function show(value) {
 export function collectConfigErrors(config) {
   const errors = [];
 
-  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
-    errors.push(`PORT: must be an integer 1-65535 (received: ${show(config.port)})`);
+  for (const [name, key] of Object.entries(REQUIRED_TEXT_VARS)) {
+    if (!config[key]) errors.push(`${name}: is required but was not set`);
   }
 
-  if (!Number.isInteger(config.chainId) || config.chainId < 1) {
-    errors.push(`CHAIN_ID: must be a positive integer (received: ${show(config.chainId)})`);
-  }
-
-  if (!config.network) {
-    errors.push('NETWORK: must not be empty');
-  }
-
-  if (!config.nodeEnv) {
-    errors.push('NODE_ENV: must not be empty');
-  }
-
-  for (const [envName, value] of [
-    ['RPC_URL', config.rpcUrl],
-    ['GECKOTERMINAL_BASE_URL', config.geckoTerminalBaseUrl],
-    ['DEXSCREENER_BASE_URL', config.dexScreenerBaseUrl],
-  ]) {
-    if (!isAbsoluteHttpUrl(value)) {
-      errors.push(`${envName}: must be an absolute http(s) URL (received: ${JSON.stringify(value)})`);
+  for (const name of REQUIRED_NUM_VARS) {
+    const value = config[name === 'PORT' ? 'port' : 'chainId'];
+    if (value === null) errors.push(`${name}: is required but was not set`);
+    else if (!Number.isInteger(value)) {
+      errors.push(`${name}: must be an integer (received: ${show(value)})`);
     }
   }
 
-  if (!config.allowAllOrigins) {
-    for (const origin of config.corsOrigins) {
-      if (!isAbsoluteHttpUrl(origin)) {
-        errors.push(
-          `CORS_ORIGINS: each entry must be an absolute origin (received: ${JSON.stringify(origin)})`,
-        );
-      }
-    }
+  if (!config.allowAllOrigins && config.corsOrigins.length === 0) {
+    errors.push(
+      'CORS_ORIGINS: is required but was not set'
+        + ' (comma-separated origins, or * to allow any)',
+    );
   }
 
   return errors;
@@ -152,10 +109,20 @@ export function assertValidConfig(config) {
   const errors = collectConfigErrors(config);
   if (errors.length === 0) return config;
 
-  const source = ENV_LOCAL_PATH;
-  console.error('[CONFIG] Invalid environment configuration:');
+  console.error('[CONFIG] Required configuration is missing or unusable:');
   for (const error of errors) console.error(`  - ${error}`);
-  console.error(`\nFix ${source} (or the shell environment) and restart. The server did not start.`);
+  console.error(
+    '\nRequired: '
+      + [
+        ...Object.keys(REQUIRED_TEXT_VARS),
+        ...REQUIRED_NUM_VARS,
+        'CORS_ORIGINS',
+      ].join(', '),
+  );
+  console.error(
+    `Set them in ${ENV_LOCAL_PATH} (or the shell environment) and restart.`
+      + '\nThe server did not start and no port was opened.',
+  );
 
   process.exit(1);
 }
@@ -164,7 +131,6 @@ const shellEnv = { ...process.env };
 
 loadEnvFile(ENV_LOCAL_PATH, ENV_PATH);
 
-// Put the real environment back on top so a file value cannot shadow it.
 Object.assign(process.env, shellEnv);
 
 const config = loadConfig();

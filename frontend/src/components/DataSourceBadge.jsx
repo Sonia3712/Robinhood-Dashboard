@@ -1,4 +1,3 @@
-// Data source attribution badge - dark theme
 export default function DataSourceBadge({ source = 'geckoterminal' }) {
   const sources = {
     geckoterminal: {
@@ -32,7 +31,7 @@ export default function DataSourceBadge({ source = 'geckoterminal' }) {
           </a>
         ) : null}
       </span>
-      <span className="ml-2 text-slate-500">• Read-only • Auto-refresh (polling)</span>
+      <span className="ml-2 text-slate-500">• Read-only • Auto-refresh</span>
     </div>
   );
 }

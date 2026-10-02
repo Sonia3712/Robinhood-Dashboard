@@ -1,4 +1,3 @@
-// Error message component - dark theme
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function ErrorMessage({ message, onRetry }) {

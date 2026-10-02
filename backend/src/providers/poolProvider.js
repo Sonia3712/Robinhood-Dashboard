@@ -1,5 +1,3 @@
-
-
 import { geckoTerminalClient } from '../services/geckoTerminal.js';
 import { dexScreenerClient } from '../services/dexScreener.js';
 import { NETWORK, toLowerCaseAddress } from '../utils/normalize.js';
@@ -16,10 +14,6 @@ export function getTopPoolsByVolume(page = 1) {
   return geckoTerminalClient.getTopPoolsByVolume(page);
 }
 
-/**
- * Pool by address. GeckoTerminal is the index of record; DEX Screener is only
- * used when GeckoTerminal has no listing for the address.
- */
 export async function getPoolByAddress(poolAddress) {
   const address = toLowerCaseAddress(poolAddress);
   if (!address) return null;
