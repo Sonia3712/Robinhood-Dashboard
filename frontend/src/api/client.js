@@ -14,13 +14,28 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const NETWORK = 'robinhood';
 
 export class ApiError extends Error {
-  constructor(message, { status, url, detail } = {}) {
+  constructor(message, { status, url, detail, retryAfterMs, rateLimited } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.url = url;
     this.detail = detail;
+    this.retryAfterMs = retryAfterMs ?? null;
+    this.rateLimited = rateLimited ?? status === 429;
   }
+}
+
+function parseRetryAfterMs(response) {
+  const header = response.headers.get('retry-after');
+  if (!header) return null;
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const asDate = Date.parse(header);
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now());
+
+  return null;
 }
 
 async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init } = {}) {
@@ -37,17 +52,24 @@ async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }
     const response = await fetch(url, { ...init, signal: controller.signal });
 
     if (!response.ok) {
-
       let detail = null;
+      let bodyRetryAfterMs = null;
       try {
         const body = await response.json();
         detail = body?.detail || body?.error || null;
+        if (Number.isFinite(body?.retryAfterMs)) bodyRetryAfterMs = body.retryAfterMs;
       } catch {
-
+        detail = null;
       }
+
       throw new ApiError(
         detail || `Request failed with status ${response.status}`,
-        { status: response.status, url, detail },
+        {
+          status: response.status,
+          url,
+          detail,
+          retryAfterMs: parseRetryAfterMs(response) ?? bodyRetryAfterMs,
+        },
       );
     }
 
@@ -58,7 +80,6 @@ async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...init }
     }
     throw error;
   } finally {
-
     clearTimeout(timeoutId);
   }
 }

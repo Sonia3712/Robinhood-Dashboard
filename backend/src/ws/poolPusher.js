@@ -5,6 +5,7 @@ import {
   getTopPoolsByVolume,
 } from '../providers/poolProvider.js';
 import config from '../config.js';
+import { logThrottled } from '../utils/logger.js';
 
 export const WS_PATH = '/ws';
 export const HEARTBEAT_MS = 30_000;
@@ -45,7 +46,7 @@ export function attachPoolPusher(server, overrides = {}) {
         updatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      console.error(`[WS] ${feature} fetch failed:`, error.message);
+      logThrottled('WS', `${feature}:error`, `${feature} fetch failed: ${error.message}`);
       return null;
     }
   }

@@ -4,6 +4,8 @@ const SAFE_QUERY_PARAMS = ['network', 'page'];
 
 const MAX_VALUE_LENGTH = 160;
 
+const throttleState = new Map();
+
 export function sanitizeUrl(originalUrl) {
   let parsed;
   try {
@@ -32,6 +34,15 @@ export function logServer(message) {
 
 export function logError(scope, message) {
   console.error(`[${scope}] ${message}`);
+}
+
+export function logThrottled(scope, key, message, intervalMs = 15_000) {
+  const now = Date.now();
+  const previous = throttleState.get(key);
+  if (previous !== undefined && now - previous < intervalMs) return false;
+  throttleState.set(key, now);
+  console.warn(`[${scope}] ${message}`);
+  return true;
 }
 
 export function logRequest({ method, url, status, durationMs, cache }) {

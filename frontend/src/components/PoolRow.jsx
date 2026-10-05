@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Zap } from 'lucide-react';
 import {
   formatCurrency,
   formatNumber,
@@ -7,10 +7,12 @@ import {
   formatAge,
   formatPriceChange,
   formatTraders,
+  getDexLabel,
+  getDexVersion,
 } from '../utils/normalize';
+import { SORT_COLUMNS, isSecondaryColumn } from '../utils/sort';
 import TokenImagePreview from './TokenImagePreview';
 
-const NETWORK_NAME = 'Robinhood Chain';
 const FALLBACK_COLORS = [
   'bg-blue-500',
   'bg-green-500',
@@ -39,13 +41,12 @@ function PriceChangeCell({ value }) {
   );
 }
 
-function fallbackColor(symbol) {
-  if (!symbol) return 'bg-slate-600';
+function hashToIndex(value, modulo) {
   let hash = 0;
-  for (let i = 0; i < symbol.length; i += 1) {
-    hash = (hash * 31 + symbol.charCodeAt(i)) % 100000;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) % 100000;
   }
-  return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];
+  return hash % modulo;
 }
 
 function TokenIcon({ token, size = 28 }) {
@@ -71,7 +72,7 @@ function TokenIcon({ token, size = 28 }) {
 
   return (
     <div
-      className={`token-icon-fallback ${fallbackColor(symbol)}`}
+      className={`token-icon-fallback ${FALLBACK_COLORS[hashToIndex(symbol ?? label, FALLBACK_COLORS.length)]}`}
       style={style}
       title={label}
       aria-label={`${label} (no image available)`}
@@ -81,114 +82,148 @@ function TokenIcon({ token, size = 28 }) {
   );
 }
 
-function NetworkIcon({ size = 24 }) {
-  return (
-    <div
-      style={{ width: size, height: size }}
-      className="rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0"
-      title={NETWORK_NAME}
-      aria-label={NETWORK_NAME}
-      role="img"
-    >
-      <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-      </svg>
-    </div>
-  );
-}
-
-function DexIcon({ dex, size = 24 }) {
-  const name = dex?.name || dex?.id || null;
-  const display = name || 'Unknown DEX';
-  const monogram = display.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() || 'DX';
-  const hue = hashHue(display);
-
-  return (
-    <div
-      style={{ width: size, height: size, backgroundColor: hue }}
-      className="rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold text-[9px] leading-none"
-      title={display}
-      aria-label={display}
-      role="img"
-    >
-      {monogram}
-    </div>
-  );
-}
-
-function hashHue(value) {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) % 360;
-  }
-  return `hsl(${hash} 55% 42%)`;
-}
-
 function shortAddress(address) {
   if (!address) return '';
   return address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
 }
 
-export default function PoolRow({ pool, index }) {
+/**
+ * A ticker is only usable if it carries at least one alphanumeric character.
+ * Providers occasionally report symbols such as "???" for unlabelled tokens;
+ * those are dropped rather than rendered as a broken placeholder.
+ */
+function usableSymbol(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/[a-z0-9]/i.test(trimmed)) return null;
+  return trimmed;
+}
+
+function formatFee(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return `${Number(value.toFixed(4))}%`;
+}
+
+export default function PoolRow({ pool, index, sortColumnId }) {
   const [previewToken, setPreviewToken] = useState(null);
 
   const base = pool?.baseToken ?? {};
   const quote = pool?.quoteToken ?? {};
 
-  const baseSymbol = base.symbol || null;
-  const quoteSymbol = quote.symbol || null;
-  const baseName = base.name || baseSymbol || 'Unknown token';
+  // Some providers report a symbol with no alphanumeric content (e.g. "???").
+  // That is placeholder-looking noise rather than a real ticker, so it is
+  // treated as "not reported" and the token name is preferred instead.
+  const baseSymbol = usableSymbol(base.symbol) || usableSymbol(base.name);
+  const quoteSymbol = usableSymbol(quote.symbol) || usableSymbol(quote.name);
+  const baseName = base.name || null;
 
-  const hasSymbols = Boolean(baseSymbol || quoteSymbol);
-  const pairLabel = hasSymbols
-    ? `${baseSymbol || '?'} / ${quoteSymbol || '?'}`
-    : pool?.dex?.name || shortAddress(pool?.poolAddress) || 'Unknown pair';
+  const dexLabel = getDexLabel(pool?.dex);
+  const dexVersion = getDexVersion(pool?.dex);
 
-  const dexLabel = (pool?.dex?.name || pool?.dex?.id || 'Unknown DEX')
-    .replace(new RegExp(`[-_]?${'robinhood'}$`, 'i'), '')
-    .toUpperCase();
+  // Only render symbols the provider actually reported; the base symbol carries
+  // the emphasis and the quote symbol is muted. Nothing is invented for a
+  // missing value, and no separator is emitted when one side is absent.
+  const pairTitle = [baseSymbol, quoteSymbol].filter(Boolean).join(' / ');
+  const pairFallback = dexLabel || shortAddress(pool?.poolAddress) || null;
+
+  const projectName = baseName && baseName !== baseSymbol ? baseName : null;
+
+  // Fee and boost are distinct provider concepts and never share a source:
+  // feePercentage is the pool fee tier, boosts is the paid DEX Screener boost count.
+  const fee = formatFee(pool?.feePercentage);
+  const boosts = Number.isFinite(pool?.boosts) && pool.boosts > 0 ? Math.trunc(pool.boosts) : null;
 
   const marketCap = pool?.marketCap ?? pool?.fdv ?? null;
   const txns24h = pool?.txns?.h24
     ? (pool.txns.h24.buys ?? 0) + (pool.txns.h24.sells ?? 0)
     : null;
 
-  const canPreview = Boolean(base.iconUrl);
+  const previewableToken = baseSymbol || baseName ? { ...base, symbol: baseSymbol, name: baseName } : null;
+
+  const isSecondary = (columnId) =>
+    isSecondaryColumn(SORT_COLUMNS.find((c) => c.id === columnId), sortColumnId);
 
   return (
     <tr className="table-row">
-      <td className="table-cell token-cell token-cell-sticky text-left">
+      <td className="table-cell token-cell text-left">
         <div className="token-info">
-          <span className="text-slate-500 font-mono text-xs w-6 text-right mr-1">{index + 1}</span>
+          <span className="token-rank">{index + 1}</span>
 
-          <div className="token-icons flex items-center gap-1 flex-shrink-0">
-            <NetworkIcon size={24} />
+          {previewableToken ? (
+            <button
+              type="button"
+              onClick={() => previewableToken.iconUrl && setPreviewToken(previewableToken)}
+              className={`token-icon-button ${previewableToken.iconUrl ? '' : 'cursor-default'}`}
+              title={previewableToken.iconUrl ? `Preview ${baseName || baseSymbol}` : undefined}
+              aria-label={
+                previewableToken.iconUrl
+                  ? `Enlarge ${baseName || baseSymbol} icon`
+                  : `${baseName || baseSymbol} (no image available)`
+              }
+              disabled={!previewableToken.iconUrl}
+            >
+              <TokenIcon token={previewableToken} />
+            </button>
+          ) : (
+            <TokenIcon token={base} />
+          )}
 
-            <DexIcon dex={pool?.dex} size={24} />
+          {dexVersion ? (
+            <span className="token-dex-version" title={`${dexLabel ?? 'DEX'} version ${dexVersion}`}>
+              {dexVersion}
+            </span>
+          ) : null}
 
-            {canPreview ? (
-              <button
-                type="button"
-                onClick={() => setPreviewToken({ ...base, symbol: baseSymbol, name: baseName })}
-                className="token-icon-button"
-                title={`Preview ${baseName}`}
-                aria-label={`Enlarge ${baseName} icon`}
-              >
-                <TokenIcon token={{ ...base, symbol: baseSymbol, name: baseName }} size={28} />
-              </button>
-            ) : (
-              <TokenIcon token={{ ...base, symbol: baseSymbol, name: baseName }} size={28} />
-            )}
+          <div className="token-details">
+            <div className="token-pair-line">
+              {baseSymbol ? (
+                <span className="token-symbol truncate" title={pairTitle || baseSymbol}>
+                  {baseSymbol}
+                </span>
+              ) : null}
+
+              {baseSymbol && quoteSymbol ? (
+                <span className="token-pair-separator" aria-hidden="true">
+                  /
+                </span>
+              ) : null}
+
+              {quoteSymbol ? (
+                <span className="token-quote-symbol truncate" title={pairTitle || quoteSymbol}>
+                  {quoteSymbol}
+                </span>
+              ) : null}
+
+              {projectName ? (
+                <span className="token-name truncate" title={projectName}>
+                  {projectName}
+                </span>
+              ) : null}
+
+              {!baseSymbol && !quoteSymbol && pairFallback ? (
+                <span className="token-symbol truncate" title={pairFallback}>
+                  {pairFallback}
+                </span>
+              ) : null}
+            </div>
           </div>
 
-          <div className="token-details min-w-0">
-            <div className="flex items-center gap-1.5 flex-nowrap truncate">
-              <span className="token-symbol truncate">{pairLabel}</span>
-              <span className="token-name truncate max-w-[150px]" title={baseName}>
-                {hasSymbols ? baseName : ''}
+          <div className="token-flags">
+            {fee ? (
+              <span className="token-fee" title="Pool fee">
+                {fee}
               </span>
-              <span className="token-dex-label">{dexLabel}</span>
-            </div>
+            ) : null}
+            {boosts ? (
+              <span
+                className="token-boost"
+                title={`${boosts} paid DEX Screener boost${boosts === 1 ? '' : 's'}`}
+              >
+                <Zap className="token-boost-icon" aria-hidden="true" />
+                {boosts}
+              </span>
+            ) : null}
           </div>
         </div>
       </td>
@@ -210,9 +245,7 @@ export default function PoolRow({ pool, index }) {
       </td>
 
       <td className="table-cell table-cell-right">
-        <span className="compact-number">
-          {txns24h === null ? '—' : (formatNumber(txns24h) ?? '—')}
-        </span>
+        <span className="compact-number">{txns24h === null ? '—' : formatNumber(txns24h)}</span>
       </td>
 
       <td className="table-cell table-cell-right">
@@ -223,11 +256,11 @@ export default function PoolRow({ pool, index }) {
         </span>
       </td>
 
-      <td className="table-cell table-cell-right">
+      <td className={`table-cell table-cell-right ${isSecondary('traders') ? 'table-cell-col-optional' : ''}`}>
         <span className="compact-number-muted">{formatTraders(pool?.traders)}</span>
       </td>
 
-      <td className="table-cell table-cell-right">
+      <td className={`table-cell table-cell-right ${isSecondary('5m') ? 'table-cell-col-optional' : ''}`}>
         <PriceChangeCell value={pool?.priceChange?.m5} />
       </td>
 
@@ -235,7 +268,7 @@ export default function PoolRow({ pool, index }) {
         <PriceChangeCell value={pool?.priceChange?.m1} />
       </td>
 
-      <td className="table-cell table-cell-right">
+      <td className={`table-cell table-cell-right ${isSecondary('6h') ? 'table-cell-col-optional' : ''}`}>
         <PriceChangeCell value={pool?.priceChange?.h6} />
       </td>
 

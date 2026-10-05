@@ -1,6 +1,5 @@
 import { geckoTerminalClient } from '../services/geckoTerminal.js';
 import { dexScreenerClient } from '../services/dexScreener.js';
-import { rpcClient } from '../services/robinhoodRpc.js';
 import { createCache, fetchCached } from '../utils/cache.js';
 import { withTimeout } from '../utils/rateLimiter.js';
 import {
@@ -17,7 +16,6 @@ const searchCache = createCache();
 
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const PROVIDER_TIMEOUT_MS = 10_000;
-const RPC_TIMEOUT_MS = 5_000;
 const TTL = 300_000;
 
 export function isAddressQuery(query) {
@@ -40,10 +38,9 @@ export async function search(rawQuery) {
 async function searchByAddress(query) {
   const address = toLowerCaseAddress(query);
 
-  const [gecko, dex, onChain] = await Promise.allSettled([
+  const [gecko, dex] = await Promise.allSettled([
     withTimeout(() => geckoTerminalClient.getPoolsForToken(address), PROVIDER_TIMEOUT_MS, 'GeckoTerminal'),
     withTimeout(() => searchDexByExactAddress(address), PROVIDER_TIMEOUT_MS, 'DEX Screener'),
-    withTimeout(() => rpcClient.isContract(address), RPC_TIMEOUT_MS, 'RPC isContract'),
   ]);
 
   const pools = mergePoolSets([
@@ -51,9 +48,9 @@ async function searchByAddress(query) {
     fulfilled(dex),
   ]);
 
-  const verifiedOnChain = onChain.status === 'fulfilled' ? onChain.value === true : false;
+  const verifiedOnChain = false;
 
-  const tokens = await collectTokens(address, pools, verifiedOnChain);
+  const tokens = collectTokens(address, pools);
 
   return {
     query,
@@ -62,7 +59,7 @@ async function searchByAddress(query) {
     verifiedOnChain,
     tokens,
     pools: sortPoolsByVolumeDesc(pools),
-    sources: describeSources(gecko, dex, onChain),
+    sources: describeSources(gecko, dex),
   };
 }
 
@@ -75,7 +72,7 @@ async function searchDexByExactAddress(address) {
   );
 }
 
-async function collectTokens(address, pools, verifiedOnChain) {
+function collectTokens(address, pools) {
   const fromPools = [];
   for (const pool of pools) {
     for (const token of [pool.baseToken, pool.quoteToken]) {
@@ -86,17 +83,7 @@ async function collectTokens(address, pools, verifiedOnChain) {
   }
 
   if (fromPools.length > 0) return deduplicateTokens(fromPools);
-
-  if (!verifiedOnChain) return [];
-
-  try {
-    const metadata = await rpcClient.getTokenMetadata(address);
-    if (!metadata?.symbol && !metadata?.name) return [];
-    return [normalizeToken({ address, ...metadata }, 'rpc')];
-  } catch (error) {
-    console.warn('[SEARCH] RPC token metadata failed:', error.message);
-    return [];
-  }
+  return [];
 }
 
 async function searchByText(query) {
@@ -118,7 +105,7 @@ async function searchByText(query) {
     verifiedOnChain: false,
     tokens,
     pools: sortPoolsByVolumeDesc(pools),
-    sources: describeSources(gecko, dex, null),
+    sources: describeSources(gecko, dex),
   };
 }
 
@@ -176,10 +163,12 @@ function mergePoolSets(sets) {
 }
 
 function describeSources(...results) {
-  const names = ['geckoterminal', 'dexscreener', 'rpc'];
+  const names = ['geckoterminal', 'dexscreener'];
   const out = {};
   results.forEach((result, index) => {
-    out[names[index]] = result?.status === 'fulfilled';
+    if (names[index]) {
+      out[names[index]] = result?.status === 'fulfilled';
+    }
   });
   return out;
 }
@@ -192,6 +181,6 @@ function emptyResult(query, matchType) {
     verifiedOnChain: false,
     tokens: [],
     pools: [],
-    sources: { geckoterminal: false, dexscreener: false, rpc: false },
+    sources: { geckoterminal: false, dexscreener: false },
   };
 }

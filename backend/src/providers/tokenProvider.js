@@ -1,5 +1,4 @@
 import { geckoTerminalClient } from '../services/geckoTerminal.js';
-import { rpcClient } from '../services/robinhoodRpc.js';
 import {
   NETWORK,
   normalizeToken,
@@ -20,32 +19,27 @@ export async function getTokenByAddress(address) {
   const key = `detail:${NETWORK}:${addr}`;
 
   return fetchCached(tokenCache, key, async () => {
-    const [indexed, onChain, metadata] = await Promise.allSettled([
+    const [indexed] = await Promise.allSettled([
       withTimeout(() => geckoTerminalClient.getToken(addr), 8000, 'GeckoTerminal token'),
-      withTimeout(() => rpcClient.isContract(addr), 5000, 'RPC isContract'),
-      withTimeout(() => rpcClient.getTokenMetadata(addr), 8000, 'RPC metadata'),
     ]);
 
-    const verifiedOnChain = onChain.status === 'fulfilled' ? onChain.value === true : false;
     const gt = indexed.status === 'fulfilled' ? indexed.value : null;
-    const rpc = metadata.status === 'fulfilled' ? metadata.value : null;
 
-    if (!gt && !rpc && !verifiedOnChain) return null;
+    if (!gt) return null;
 
-    const source = gt ? 'geckoterminal' : 'rpc';
     const token = normalizeToken(
       {
         address: addr,
-        symbol: gt?.symbol || rpc?.symbol,
-        name: gt?.name || rpc?.name,
+        symbol: gt?.symbol,
+        name: gt?.name,
         iconUrl: gt?.iconUrl || null,
-        decimals: gt?.decimals ?? rpc?.decimals,
-        totalSupply: rpc?.totalSupply,
+        decimals: gt?.decimals,
+        totalSupply: gt?.totalSupply,
       },
-      source,
+      'geckoterminal',
     );
 
-    token.verifiedOnChain = verifiedOnChain;
+    token.verifiedOnChain = false;
     return token;
   }, TTL);
 }

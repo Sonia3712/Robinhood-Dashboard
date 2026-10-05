@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
       verifiedOnChain: false,
       tokens: [],
       pools: [],
-      sources: { geckoterminal: false, dexscreener: false, rpc: false },
+      sources: { geckoterminal: false, dexscreener: false },
       ...body,
     });
 

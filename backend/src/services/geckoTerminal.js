@@ -1,5 +1,6 @@
-import { apiRateLimiter } from '../utils/rateLimiter.js';
+import { geckoTerminalRateLimiter } from '../utils/rateLimiter.js';
 import { createCache, fetchCached, readStale } from '../utils/cache.js';
+import { logThrottled } from '../utils/logger.js';
 import { requestJson } from './httpClient.js';
 import {
   NETWORK,
@@ -28,16 +29,82 @@ const TTL_SEARCH = 300_000;
 
 const STALE_GRACE = 15 * 60_000;
 
-class GeckoTerminalClient {
-  async request(url, { signal } = {}) {
-    return apiRateLimiter.execute(async (rateLimitSignal) => {
+const MIN_COOLDOWN_MS = 1_000;
+const DEFAULT_COOLDOWN_MS = 10_000;
+const MAX_COOLDOWN_MS = 90_000;
 
-      return requestJson(url, {
+// Once a provider answers 429, every endpoint of that provider is paused until
+// the cooldown expires, so a user scrolling back to the same page cannot turn
+// one rate limit response into a burst of further requests. Repeated 429s grow
+// the cooldown; the first success clears it.
+const cooldowns = new Map();
+const strikes = new Map();
+
+function cooldownRemaining(feature) {
+  const entry = cooldowns.get(feature);
+  if (!entry) return 0;
+  const remaining = entry.until - Date.now();
+  if (remaining <= 0) {
+    cooldowns.delete(feature);
+    return 0;
+  }
+  return remaining;
+}
+
+function clearCooldown(feature) {
+  cooldowns.delete(feature);
+  strikes.delete(feature);
+}
+
+function startCooldown(feature, error) {
+  const retryAfterMs = Number(error?.retryAfterMs);
+  const count = (strikes.get(feature) ?? 0) + 1;
+  strikes.set(feature, count);
+
+  const escalated = DEFAULT_COOLDOWN_MS * 2 ** Math.min(count - 1, 4);
+  const waitMs = Math.min(
+    MAX_COOLDOWN_MS,
+    Math.max(
+      MIN_COOLDOWN_MS,
+      Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : escalated,
+    ),
+  );
+
+  cooldowns.set(feature, { until: Date.now() + waitMs });
+  geckoTerminalRateLimiter.pause(waitMs);
+
+  logThrottled(
+    'GECKO',
+    `${feature}:cooldown`,
+    `${feature} rate limited by GeckoTerminal, pausing requests for `
+    + `${Math.round(waitMs / 1000)}s (strike ${count})`,
+  );
+
+  return waitMs;
+}
+
+function rateLimitError(feature, remainingMs) {
+  const error = new Error(`GeckoTerminal is rate limiting ${feature}`);
+  error.status = 429;
+  error.rateLimited = true;
+  error.cooldown = true;
+  error.retryAfterMs = Math.max(MIN_COOLDOWN_MS, remainingMs);
+  return error;
+}
+
+class GeckoTerminalClient {
+  async request(url, { signal, endpoint, page } = {}) {
+    const data = await geckoTerminalRateLimiter.execute(
+      (rateLimitSignal) => requestJson(url, {
         signal: signal ?? rateLimitSignal,
         headers: { Accept: 'application/json' },
         label: 'GeckoTerminal',
-      });
-    });
+      }),
+      { endpoint, page },
+    );
+
+    if (endpoint) clearCooldown(endpoint);
+    return data;
   }
 
   #url(base, endpoint, params = {}) {
@@ -52,15 +119,14 @@ class GeckoTerminalClient {
     return this.#list('new', this.#url(NETWORK_BASE, '/new_pools', {
       page,
       include: INCLUDE_POOL_RELATIONS,
-    }), TTL_NEW, sortPoolsByAgeAsc);
+    }), page, TTL_NEW, sortPoolsByAgeAsc);
   }
 
   async getTrendingPools(page = 1) {
-
     return this.#list('trending', this.#url(NETWORK_BASE, '/trending_pools', {
       page,
       include: INCLUDE_POOL_RELATIONS,
-    }), TTL_TRENDING);
+    }), page, TTL_TRENDING);
   }
 
   async getTopPoolsByVolume(page = 1) {
@@ -68,23 +134,32 @@ class GeckoTerminalClient {
       page,
       sort: 'h24_volume_usd_desc',
       include: INCLUDE_POOL_RELATIONS,
-    }), TTL_VOLUME);
+    }), page, TTL_VOLUME);
   }
 
-  async #list(feature, url, ttlMs, sort = (pools) => pools) {
+  async #list(feature, url, page, ttlMs, sort = (pools) => pools) {
     const key = `${feature}:${NETWORK}:${url}`;
+
+    const pausedFor = cooldownRemaining(feature);
+    if (pausedFor > 0) {
+      const stale = readStale(poolCache, key);
+      if (stale !== null) return stale;
+      throw rateLimitError(feature, pausedFor);
+    }
 
     try {
       const value = await fetchCached(poolCache, key, async () => {
-        const data = await this.request(url);
+        const data = await this.request(url, { endpoint: feature, page });
         return sort(this.#toPools(data));
       }, ttlMs, STALE_GRACE);
 
       poolCache.set(key, { value, expiresAt: Date.now() + ttlMs }, (ttlMs + STALE_GRACE) / 1000);
       return value;
     } catch (error) {
+      if (error?.status === 429 && !error.cooldown) startCooldown(feature, error);
+
       const stale = readStale(poolCache, key);
-      if (stale) return stale;
+      if (stale !== null) return stale;
       throw error;
     }
   }
@@ -93,22 +168,26 @@ class GeckoTerminalClient {
     const address = toLowerCaseAddress(poolAddress);
     if (!address) return null;
 
+    const feature = 'pool-detail';
     const key = `pool:${NETWORK}:${address}`;
     const url = this.#url(NETWORK_BASE, `/pools/${address}`, {
       include: INCLUDE_POOL_RELATIONS,
     });
 
+    const pausedFor = cooldownRemaining(feature);
+    if (pausedFor > 0) throw rateLimitError(feature, pausedFor);
+
     try {
       return await fetchCached(poolCache, key, async () => {
-        const data = await this.request(url);
+        const data = await this.request(url, { endpoint: feature });
         const [pool] = this.#toPools(data);
         return pool ?? null;
       }, TTL_DETAIL);
     } catch (error) {
-
+      if (error?.status === 429 && !error.cooldown) startCooldown(feature, error);
       if (error?.status === 404) return null;
       const stale = readStale(poolCache, key);
-      if (stale) return stale;
+      if (stale !== null) return stale;
       throw error;
     }
   }
@@ -117,20 +196,25 @@ class GeckoTerminalClient {
     const address = toLowerCaseAddress(tokenAddress);
     if (!address) return [];
 
+    const feature = 'token-pools';
     const key = `token-pools:${NETWORK}:${address}`;
     const url = this.#url(NETWORK_BASE, `/tokens/${address}/pools`, {
       include: INCLUDE_POOL_RELATIONS,
     });
 
+    const pausedFor = cooldownRemaining(feature);
+    if (pausedFor > 0) throw rateLimitError(feature, pausedFor);
+
     try {
       return await fetchCached(poolCache, key, async () => {
-        const data = await this.request(url);
+        const data = await this.request(url, { endpoint: feature });
         return sortPoolsByVolumeDesc(this.#toPools(data));
       }, TTL_DETAIL);
     } catch (error) {
+      if (error?.status === 429 && !error.cooldown) startCooldown(feature, error);
       if (error?.status === 404) return [];
       const stale = readStale(poolCache, key);
-      if (stale) return stale;
+      if (stale !== null) return stale;
       throw error;
     }
   }
@@ -139,11 +223,15 @@ class GeckoTerminalClient {
     const address = toLowerCaseAddress(tokenAddress);
     if (!address) return null;
 
+    const feature = 'token';
     const key = `token:${NETWORK}:${address}`;
     const url = this.#url(NETWORK_BASE, `/tokens/${address}`);
 
+    const pausedFor = cooldownRemaining(feature);
+    if (pausedFor > 0) throw rateLimitError(feature, pausedFor);
+
     try {
-      const data = await fetchCached(tokenCache, key, () => this.request(url), 300_000);
+      const data = await fetchCached(tokenCache, key, () => this.request(url, { endpoint: feature }), 300_000);
       const attributes = data?.data?.attributes ?? null;
       if (!attributes) return null;
       return {
@@ -154,6 +242,7 @@ class GeckoTerminalClient {
         decimals: int(attributes.decimals),
       };
     } catch (error) {
+      if (error?.status === 429 && !error.cooldown) startCooldown(feature, error);
       if (error?.status === 404) return null;
       throw error;
     }
@@ -163,21 +252,25 @@ class GeckoTerminalClient {
     const trimmed = String(query || '').trim();
     if (!trimmed) return [];
 
+    const feature = 'search';
     const key = `search:${NETWORK}:${trimmed.toLowerCase()}`;
     const url = this.#url(API_BASE, '/search/pools', {
       query: trimmed,
       include: INCLUDE_POOL_RELATIONS,
     });
 
+    const pausedFor = cooldownRemaining(feature);
+    if (pausedFor > 0) return [];
+
     try {
       return await fetchCached(tokenCache, key, async () => {
-        const data = await this.request(url);
-
+        const data = await this.request(url, { endpoint: feature });
         return sortPoolsByVolumeDesc(this.#toPools(data, { networkScoped: false }));
       }, TTL_SEARCH);
     } catch (error) {
+      if (error?.status === 429 && !error.cooldown) startCooldown(feature, error);
       const stale = readStale(tokenCache, key);
-      if (stale) return stale;
+      if (stale !== null) return stale;
       return [];
     }
   }
@@ -222,6 +315,10 @@ class GeckoTerminalClient {
       dex: {
         id: dexRefId,
         name: dexIncluded?.attributes?.name || prettifyDexId(dexRefId),
+        iconUrl:
+          dexIncluded?.attributes?.image_url
+          || dexIncluded?.attributes?.logo_uri
+          || null,
       },
 
       baseToken: {
@@ -250,6 +347,10 @@ class GeckoTerminalClient {
       priceChange: pickWindows(attributes.price_change_percentage),
       txns: pickWindows(transactions),
       traders,
+
+      // Prefer an explicit provider attribute if one ever appears; otherwise use
+      // the fee tier parsed from the pool name.
+      feePercentage: attributes.pool_fee_percentage ?? nameFallback.feePercentage,
 
       sources: ['geckoterminal'],
     });
@@ -291,12 +392,30 @@ function stripNetworkPrefix(refId) {
   return refId.startsWith(prefix) ? refId.slice(prefix.length) : refId;
 }
 
+/**
+ * The v2 pool payload has no fee attribute; the fee tier is only present as a
+ * trailing percentage on the free-text pool name (e.g. "USDG / WETH 0.01%").
+ * The value is a percentage, so it is preserved as-is (0.01 => "0.01%"), not
+ * as basis points or a protocol tier. Names without a fee yield null.
+ */
 function splitPoolName(name) {
-  if (typeof name !== 'string' || !name.includes('/')) return { base: null, quote: null };
+  if (typeof name !== 'string' || !name.includes('/')) {
+    return { base: null, quote: null, feePercentage: null };
+  }
+
   const [rawBase, ...rest] = name.split('/');
   const base = rawBase.trim();
-  const quote = (rest.join('/') || '').replace(/\s+[\d.]+%$/, '').trim();
-  return { base: base || null, quote: quote || null };
+  const restName = rest.join('/') || '';
+
+  const feeMatch = restName.match(/([\d.]+)\s*%\s*$/);
+  const quote = (feeMatch ? restName.slice(0, feeMatch.index) : restName).trim();
+  const feePercentage = feeMatch ? Number.parseFloat(feeMatch[1]) : null;
+
+  return {
+    base: base || null,
+    quote: quote || null,
+    feePercentage: Number.isFinite(feePercentage) ? feePercentage : null,
+  };
 }
 
 function prettifyDexId(dexId) {

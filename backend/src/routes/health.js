@@ -15,7 +15,6 @@ router.get('/', (req, res) => {
     providers: {
       geckoTerminal: config.geckoTerminalBaseUrl,
       dexScreener: config.dexScreenerBaseUrl,
-      rpc: config.rpcUrl,
     },
   };
 

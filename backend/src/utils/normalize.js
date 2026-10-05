@@ -75,6 +75,51 @@ export function normalizeTokenRef(token) {
   };
 }
 
+const DEX_VERSION_PART = /^(?:v|ver|version)[-_ ]?(\d{1,2})$/i;
+
+export function parseDexVersion(...candidates) {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+
+    const direct = DEX_VERSION_PART.exec(trimmed);
+    if (direct) return `V${direct[1]}`;
+
+    for (const part of trimmed.split(/[-_/\s]+/)) {
+      const matched = DEX_VERSION_PART.exec(part);
+      if (matched) return `V${matched[1]}`;
+    }
+  }
+
+  return null;
+}
+
+function pickUrl(...candidates) {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+export function normalizeDex(dex, versionCandidates) {
+  if (!dex) return { id: null, name: null, version: null, iconUrl: null };
+
+  const id = dex.id || null;
+  const name = typeof dex.name === 'string' && dex.name.trim() ? dex.name.trim() : null;
+
+  return {
+    id,
+    name,
+    // An explicit version (e.g. parsed from DEX Screener labels) wins over
+    // guesses derived from the DEX id or name.
+    version: parseDexVersion(dex.version, ...(versionCandidates ?? []), id, name),
+    iconUrl: pickUrl(dex.iconUrl, dex.logoUri, dex.imageUrl),
+  };
+}
+
 export function normalizeToken(token, source) {
   const ref = normalizeTokenRef(token);
   return {
@@ -114,6 +159,7 @@ export function makePool(input) {
   const poolCreatedAt = input.poolCreatedAt || null;
   const base = normalizeTokenRef(input.baseToken);
   const quote = normalizeTokenRef(input.quoteToken);
+  const dexInput = input.dex ?? {};
 
   return {
     network: NETWORK,
@@ -124,9 +170,7 @@ export function makePool(input) {
     ageSeconds: calculateAgeSeconds(poolCreatedAt),
     age: formatAge(poolCreatedAt),
 
-    dex: input.dex
-      ? { id: input.dex.id || null, name: input.dex.name || null }
-      : { id: null, name: null },
+    dex: normalizeDex(dexInput, dexInput.versionLabels),
 
     baseToken: base,
     quoteToken: quote,
@@ -143,11 +187,20 @@ export function makePool(input) {
     txns: windowSeries((w) => txnsOf(input.txns?.[w])),
 
     traders: int(input.traders),
+    feePercentage: num(input.feePercentage),
+    boosts: num(input.boosts),
 
     sources: Array.from(new Set(input.sources || [])).filter(Boolean),
     url: input.url || null,
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function formatFee(feePercentage) {
+  const value = num(feePercentage);
+  if (value === null) return null;
+  const rounded = Number(value.toFixed(4));
+  return `${rounded}%`;
 }
 
 export function sortPoolsByVolumeDesc(pools) {
@@ -200,7 +253,7 @@ export function mergePoolData(a, b) {
     ...a,
     poolAddress: a.poolAddress || b.poolAddress,
     poolCreatedAt: prefer(a.poolCreatedAt, b.poolCreatedAt),
-    dex: a.dex?.id || a.dex?.name ? a.dex : b.dex,
+    dex: mergeDex(a.dex, b.dex),
     baseToken: { ...b.baseToken, ...stripNulls(a.baseToken) },
     quoteToken: { ...b.quoteToken, ...stripNulls(a.quoteToken) },
     priceUsd: prefer(a.priceUsd, b.priceUsd),
@@ -212,8 +265,24 @@ export function mergePoolData(a, b) {
     priceChange: pickSeries('priceChange'),
     txns: pickSeries('txns'),
     traders: prefer(a.traders, b.traders),
+    feePercentage: prefer(a.feePercentage, b.feePercentage),
+    boosts: prefer(a.boosts, b.boosts),
     url: prefer(a.url, b.url),
     sources: Array.from(new Set([...(a.sources || []), ...(b.sources || [])])),
+  };
+}
+
+function mergeDex(a, b) {
+  if (!a?.id && !a?.name) return b;
+  if (!b?.id && !b?.name) return a;
+
+  const prefer = (x, y) => (x === null || x === undefined ? y : x);
+
+  return {
+    id: prefer(a.id, b.id),
+    name: prefer(a.name, b.name),
+    version: prefer(a.version, b.version),
+    iconUrl: prefer(a.iconUrl, b.iconUrl),
   };
 }
 

@@ -47,21 +47,15 @@ body {
   }
 }
 
-.table-container {
-  @apply bg-slate-900/90 border border-slate-700/50 rounded-lg overflow-hidden;
-  overflow-y: auto;
-  max-height: 70vh;
-}
-
 .table-header {
-  @apply bg-slate-800 border-b border-slate-700/50;
+  @apply bg-slate-900 border-b border-slate-800;
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
 .table-header th {
-  @apply px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap;
+  @apply px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap;
   background: inherit;
 }
 
@@ -70,11 +64,11 @@ body {
 }
 
 .table-row {
-  @apply hover:bg-slate-800/50 transition-colors duration-100;
+  @apply hover:bg-slate-800/40 transition-colors duration-100;
 }
 
 .table-cell {
-  @apply px-3 py-2 text-sm whitespace-nowrap;
+  @apply px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden;
 }
 
 .table-cell-right {
@@ -86,15 +80,68 @@ body {
 }
 
 .token-cell {
-  @apply max-w-md min-w-[200px];
+  @apply min-w-0;
+}
+
+/*
+ * `table-fixed` resolves column widths from the header row, so the TOKEN width
+ * must be declared on the <th> (see .token-col). Without it every column splits
+ * the width equally and the non-shrinkable parts of the cell (rank, icon,
+ * version) squeeze the pair symbols down to zero width.
+ */
+.token-col {
+  width: 27%;
 }
 
 .token-info {
-  @apply flex items-center gap-2 min-w-0;
+  @apply flex items-center gap-1.5 min-w-0;
 }
 
-.token-icons {
+.token-rank {
+  @apply text-slate-600 font-mono text-[10px] tabular-nums text-right shrink-0;
+  width: 1.25rem;
+}
+
+.token-dex-version {
+  @apply text-[10px] font-semibold text-slate-300 bg-slate-800 border border-slate-700 rounded px-1 py-px flex-shrink-0 whitespace-nowrap;
+}
+
+.token-pair-line {
+  @apply flex items-center gap-1.5 min-w-0;
+}
+
+/*
+ * The pair symbols are the primary identity and must never be squeezed out, so
+ * they refuse to shrink. The project name is the only part allowed to give way,
+ * and it needs min-w-0 for `truncate` to actually engage on a flex item.
+ */
+.token-symbol {
+  @apply font-semibold text-slate-100 truncate shrink-0;
+}
+
+/* Quote symbol sits after the base pair, visually secondary. */
+.token-quote-symbol {
+  @apply text-slate-400 truncate shrink-0;
+}
+
+.token-pair-separator {
+  @apply text-slate-600 shrink-0;
+}
+
+.token-name {
+  @apply text-xs text-slate-400 truncate min-w-0;
+}
+
+.token-flags {
   @apply flex items-center gap-1 flex-shrink-0;
+}
+
+.token-boost {
+  @apply text-[10px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-500/30 rounded px-1 py-px flex-shrink-0 tabular-nums inline-flex items-center gap-0.5;
+}
+
+.token-boost-icon {
+  @apply h-2.5 w-2.5 shrink-0;
 }
 
 .token-icon {
@@ -134,16 +181,25 @@ body {
   @apply font-semibold text-slate-100 truncate;
 }
 
+/* Quote symbol sits after the base pair, visually secondary. */
+.token-quote-symbol {
+  @apply text-slate-400 truncate;
+}
+
+.token-pair-separator {
+  @apply text-slate-600 shrink-0;
+}
+
 .token-name {
-  @apply text-xs text-slate-500 truncate;
+  @apply text-xs text-slate-400 truncate;
 }
 
 .token-pair {
   @apply text-xs text-slate-500 truncate;
 }
 
-.token-dex-label {
-  @apply text-[10px] text-slate-500 font-medium px-1.5 py-0.5 bg-slate-800 rounded whitespace-nowrap flex-shrink-0;
+.token-fee {
+  @apply text-[10px] text-slate-400 font-medium px-1 py-px bg-slate-800 rounded whitespace-nowrap flex-shrink-0 tabular-nums;
 }
 
 .price-up {
@@ -167,7 +223,7 @@ body {
 }
 
 .search-input {
-  @apply w-full pl-10 pr-10 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200;
+  @apply w-full pl-8 pr-8 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors;
 }
 
 .tab-button {
@@ -182,41 +238,26 @@ body {
   @apply border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/50;
 }
 
-.toolbar {
-  @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 border-b border-slate-700/50;
-}
-
-.toolbar-group {
-  @apply flex items-center gap-2 flex-wrap;
-}
-
-.select-dark {
-  @apply px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 appearance-none pr-10;
-}
-
-.badge-dex {
-  @apply bg-blue-900/50 text-blue-400;
-}
-
-.badge-source-gecko {
-  @apply bg-green-900/50 text-green-400;
-}
-
-.badge-source-dexscreener {
-  @apply bg-purple-900/50 text-purple-400;
-}
-
-.badge-source-rpc {
-  @apply bg-orange-900/50 text-orange-400;
-}
-
-.badge-verified {
-  @apply bg-emerald-900/50 text-emerald-400;
-}
-
-.table-container.is-refreshing tbody {
+.is-refreshing tbody {
   opacity: 0.6;
   transition: opacity 120ms ease-out;
+}
+
+@media (max-width: 1279px) {
+  .table-cell-col-optional {
+    display: none;
+  }
+
+  /* Fewer columns share the row here, so the pair identity gets more room. */
+  .token-col {
+    width: 34%;
+  }
+}
+
+@media (max-width: 767px) {
+  .token-col {
+    width: 44%;
+  }
 }
 
 .token-preview-overlay {
@@ -292,18 +333,6 @@ body {
   @apply text-amber-300;
 }
 
-.status-strip {
-  @apply mt-4 flex items-center justify-center gap-3 text-xs text-slate-500;
-}
-
-.data-source-badge {
-  @apply mt-6 text-center text-xs;
-}
-
-.data-source-badge span {
-  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-medium;
-}
-
 @media (min-width: 1024px) {
   .token-cell-sticky {
     position: sticky;
@@ -311,6 +340,14 @@ body {
     z-index: 10;
     background: inherit;
   }
+}
+
+.rate-limit-notice {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300;
+}
+
+.rate-limit-notice-action {
+  @apply rounded border border-amber-400/40 px-2 py-0.5 text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 .loading-spinner {

@@ -81,6 +81,40 @@ export function getUniquePoolKey(pool) {
   return `${pool?.chainId ?? ''}:${toLowerCaseAddress(pool?.poolAddress) ?? ''}`;
 }
 
+const DEX_VERSION_PART = /^(?:v|ver|version)[-_ ]?(\d{1,2})$/i;
+
+/**
+ * Falls back to deriving the protocol version (V2/V3/V4/...) from the real dex
+ * id or name, so rows never show a placeholder when the provider omits it.
+ */
+export function getDexVersion(dex) {
+  const direct = typeof dex?.version === 'string' ? dex.version.trim() : '';
+  if (direct) return direct;
+
+  for (const candidate of [dex?.id, dex?.name]) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+
+    const trimmed = candidate.trim();
+    const whole = DEX_VERSION_PART.exec(trimmed);
+    if (whole) return `V${whole[1]}`;
+
+    for (const part of trimmed.split(/[-_/\s]+/)) {
+      const matched = DEX_VERSION_PART.exec(part);
+      if (matched) return `V${matched[1]}`;
+    }
+  }
+
+  return null;
+}
+
+export function getDexLabel(dex) {
+  const name = typeof dex?.name === 'string' ? dex.name.trim() : '';
+  if (name) return name;
+
+  const id = typeof dex?.id === 'string' ? dex.id.trim() : '';
+  return id || null;
+}
+
 export function mergePools(pools) {
   const seen = new Map();
   for (const pool of pools) {

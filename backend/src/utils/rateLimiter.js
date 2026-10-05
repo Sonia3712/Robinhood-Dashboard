@@ -1,3 +1,11 @@
+import { logThrottled } from './logger.js';
+
+const THROTTLE_WINDOW_MS = 60_000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function withTimeout(fn, ms, label) {
   let timeoutId;
   const timeout = new Promise((_, reject) => {
@@ -16,10 +24,23 @@ export class RateLimiter {
     this.maxDelay = options.maxDelay || 30000;
     this.timeout = options.timeout || 10000;
     this.retryBudget = options.retryBudget ?? 3;
+    this.minIntervalMs = options.minIntervalMs ?? 0;
 
     this.running = 0;
     this.queue = [];
     this.retryTimestamps = [];
+    this.nextStartAt = 0;
+    this.pausedUntil = 0;
+  }
+
+  pause(ms) {
+    const until = Date.now() + Math.max(0, ms);
+    if (until > this.pausedUntil) this.pausedUntil = until;
+    return this.pausedUntil - Date.now();
+  }
+
+  get isPaused() {
+    return this.pausedUntil > Date.now();
   }
 
   async acquire() {
@@ -44,32 +65,70 @@ export class RateLimiter {
 
   #consumeRetryBudget() {
     const now = Date.now();
-    this.retryTimestamps = this.retryTimestamps.filter((t) => now - t < 60_000);
+    this.retryTimestamps = this.retryTimestamps.filter((t) => now - t < THROTTLE_WINDOW_MS);
     if (this.retryTimestamps.length >= this.retryBudget) return false;
     this.retryTimestamps.push(now);
     return true;
   }
 
-  async execute(fn) {
+  async #waitForTurn() {
     await this.acquire();
+
+    let waitMs = 0;
+
+    if (this.pausedUntil > Date.now()) {
+      waitMs = this.pausedUntil - Date.now();
+    }
+
+    if (this.minIntervalMs > 0) {
+      const now = Date.now();
+      const earliest = Math.max(now, this.nextStartAt);
+      this.nextStartAt = earliest + this.minIntervalMs;
+      waitMs = Math.max(waitMs, earliest - now);
+    }
+
+    if (waitMs > 0) await sleep(waitMs);
+  }
+
+  async execute(fn, meta = {}) {
+    await this.#waitForTurn();
     try {
-      return await this.#executeWithRetry(fn);
+      return await this.#executeWithRetry(fn, meta);
     } finally {
       this.release();
     }
   }
 
-  async #executeWithRetry(fn) {
+  #describe(meta) {
+    const parts = [this.name];
+    if (meta?.endpoint) parts.push(meta.endpoint);
+    if (meta?.page !== undefined && meta?.page !== null) parts.push(`page=${meta.page}`);
+    return parts.join(' ');
+  }
+
+  #backoffFor(error, attempt) {
+    const retryAfterMs = parseRetryAfter(error?.retryAfter);
+    if (retryAfterMs !== null && retryAfterMs > 0) return Math.min(retryAfterMs, this.maxDelay);
+    return Math.min(this.baseDelay * 2 ** attempt + Math.random() * 500, this.maxDelay);
+  }
+
+  async #executeWithRetry(fn, meta) {
     let lastError;
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
       try {
         const result = await fn(controller.signal);
         clearTimeout(timeoutId);
+        if (attempt > 0) {
+          logThrottled(
+            'RATE',
+            `${this.#describe(meta)}:recovered`,
+            `${this.#describe(meta)} recovered after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}`,
+          );
+        }
         return result;
       } catch (error) {
         lastError = error;
@@ -81,16 +140,30 @@ export class RateLimiter {
         }
 
         if (attempt < this.maxRetries && this.#consumeRetryBudget()) {
+          const backoffMs = this.#backoffFor(error, attempt);
 
-          const retryAfterMs = parseRetryAfter(error?.retryAfter);
-          const delay = Math.min(
-            retryAfterMs ?? this.baseDelay * 2 ** attempt + Math.random() * 500,
-            this.maxDelay,
-          );
-          await new Promise((r) => setTimeout(r, delay));
+          if (error?.status === 429) {
+            error.retryAfterMs = backoffMs;
+            this.pause(backoffMs);
+            logThrottled(
+              'RATE',
+              `${this.#describe(meta)}:429`,
+              `${this.#describe(meta)} HTTP 429, pausing provider and retrying in `
+              + `${Math.round(backoffMs)}ms (attempt ${attempt + 1}/${this.maxRetries})`,
+            );
+          }
+
+          await sleep(backoffMs);
           continue;
         }
 
+        logThrottled(
+          'RATE',
+          `${this.#describe(meta)}:failed`,
+          `${this.#describe(meta)} failed after ${attempt + 1} attempt(s): `
+          + `${error?.message ?? error}`,
+          10_000,
+        );
         throw error;
       }
     }
@@ -111,14 +184,17 @@ function parseRetryAfter(value) {
   return null;
 }
 
-export const rpcRateLimiter = new RateLimiter({
-  name: 'rpc',
-  maxConcurrent: 4,
+// GeckoTerminal's public API is aggressively throttled and answers page numbers
+// beyond its maximum with HTTP 429, so requests are spaced and serialized.
+export const geckoTerminalRateLimiter = new RateLimiter({
+  name: 'geckoterminal',
+  maxConcurrent: 2,
   maxRetries: 2,
-  baseDelay: 1000,
-  maxDelay: 30000,
-  timeout: 10000,
-  retryBudget: 4,
+  baseDelay: 1500,
+  maxDelay: 30_000,
+  timeout: 15_000,
+  retryBudget: 3,
+  minIntervalMs: 2_000,
 });
 
 export const apiRateLimiter = new RateLimiter({
@@ -126,7 +202,7 @@ export const apiRateLimiter = new RateLimiter({
   maxConcurrent: 5,
   maxRetries: 2,
   baseDelay: 800,
-  maxDelay: 10000,
-  timeout: 15000,
+  maxDelay: 10_000,
+  timeout: 15_000,
   retryBudget: 3,
 });

@@ -1,6 +1,11 @@
 import config from '../config.js';
 
-export const MAX_PAGE = 25;
+// GeckoTerminal's public API answers page numbers past its maximum with
+// HTTP 429, so the API never asks the provider for a page it cannot serve.
+export const MAX_PAGE = 10;
+
+// GeckoTerminal returns up to 20 pools per list page.
+export const PAGE_SIZE = 20;
 
 export function readPage(value) {
   const page = Number.parseInt(value, 10);

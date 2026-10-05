@@ -44,6 +44,8 @@ export default function SearchResults({
   matchType,
   verifiedOnChain,
   onRetry,
+  sort,
+  onSort,
 }) {
   const hasQuery = query.trim().length > 0;
 
@@ -109,6 +111,8 @@ export default function SearchResults({
         onRetry={onRetry}
         isRefreshing={isFetching}
         emptyMessage="No trading pairs found"
+        sort={sort}
+        onSort={onSort}
       />
 
       {tokens.length > 0 ? (

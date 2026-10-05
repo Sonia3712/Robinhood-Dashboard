@@ -4,7 +4,6 @@ const REQUIRED_TEXT_VARS = {
   NODE_ENV: 'nodeEnv',
   HOST: 'host',
   NETWORK: 'network',
-  RPC_URL: 'rpcUrl',
   GECKOTERMINAL_BASE_URL: 'geckoTerminalBaseUrl',
   DEXSCREENER_BASE_URL: 'dexScreenerBaseUrl',
 };
@@ -63,7 +62,6 @@ export function loadConfig(env = process.env) {
 
     host: text('HOST'),
     network: text('NETWORK'),
-    rpcUrl: text('RPC_URL'),
     geckoTerminalBaseUrl: text('GECKOTERMINAL_BASE_URL'),
     dexScreenerBaseUrl: text('DEXSCREENER_BASE_URL'),
 

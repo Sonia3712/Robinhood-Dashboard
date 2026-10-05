@@ -5,6 +5,7 @@ import {
   NETWORK,
   makePool,
   num,
+  parseDexVersion,
   toLowerCaseAddress,
   deduplicatePools,
 } from '../utils/normalize.js';
@@ -110,6 +111,7 @@ class DexScreenerClient {
       dex: {
         id: pair.dexId ?? null,
         name: pair.dexId ? prettifyDexId(pair.dexId) : null,
+        version: parseDexVersion(...(Array.isArray(pair.labels) ? pair.labels : []), pair.dexId),
       },
       baseToken: {
         address: pair.baseToken?.address,
@@ -150,6 +152,7 @@ class DexScreenerClient {
       },
 
       traders: null,
+      boosts: pair.boosts?.active ?? null,
       url: pair.url ?? null,
       sources: ['dexscreener'],
     });
