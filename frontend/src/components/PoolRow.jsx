@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Zap } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ArrowLeftRight, TrendingUp, TrendingDown, Minus, Zap } from 'lucide-react';
 import {
   formatCurrency,
   formatNumber,
-  formatPrice,
+  formatPriceUsd,
   formatAge,
   formatPriceChange,
   formatTraders,
   getDexLabel,
   getDexVersion,
+  isRecentPool,
 } from '../utils/normalize';
+import { getDexImage } from '../utils/dexIcons';
 import { SORT_COLUMNS, isSecondaryColumn } from '../utils/sort';
 import TokenImagePreview from './TokenImagePreview';
 
@@ -82,6 +84,45 @@ function TokenIcon({ token, size = 28 }) {
   );
 }
 
+/**
+ * DEX mark for the All DEXes row.
+ *
+ * Renders the real local brand logo (see `src/utils/dexIcons.js`) as a genuine
+ * <img>, sized, rounded and bordered exactly like the token icon beside it so
+ * the two identity marks in the cell read consistently. Brands are resolved
+ * from the provider's real `dex.id` / `dex.name`; nothing is fabricated. A DEX
+ * whose brand is not shipped yet falls back to the neutral swap tile.
+ */
+function DexIcon({ dex }) {
+  const [imgError, setImgError] = useState(false);
+  const logo = getDexImage(dex);
+  const label = getDexLabel(dex) ?? 'Unknown DEX';
+
+  if (logo && !imgError) {
+    return (
+      <img
+        src={logo.src}
+        alt={`${label} logo`}
+        title={label}
+        className="dex-icon"
+        onError={() => setImgError(true)}
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+
+  return (
+    <span
+      className="dex-icon dex-icon-fallback"
+      title={label}
+      aria-label={`${label} (no DEX artwork available)`}
+    >
+      <ArrowLeftRight className="dex-icon-glyph" aria-hidden="true" />
+    </span>
+  );
+}
+
 function shortAddress(address) {
   if (!address) return '';
   return address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
@@ -100,13 +141,11 @@ function usableSymbol(value) {
   return trimmed;
 }
 
-function formatFee(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  return `${Number(value.toFixed(4))}%`;
-}
-
-export default function PoolRow({ pool, index, sortColumnId }) {
-  const [previewToken, setPreviewToken] = useState(null);
+export default function PoolRow({ pool, index, sortColumnId, showDexContext = false }) {
+  const [hoveredToken, setHoveredToken] = useState(null);
+  const [iconHot, setIconHot] = useState(false);
+  const [previewHot, setPreviewHot] = useState(false);
+  const previewButtonRef = useRef(null);
 
   const base = pool?.baseToken ?? {};
   const quote = pool?.quoteToken ?? {};
@@ -129,9 +168,8 @@ export default function PoolRow({ pool, index, sortColumnId }) {
 
   const projectName = baseName && baseName !== baseSymbol ? baseName : null;
 
-  // Fee and boost are distinct provider concepts and never share a source:
-  // feePercentage is the pool fee tier, boosts is the paid DEX Screener boost count.
-  const fee = formatFee(pool?.feePercentage);
+  // Boost is a paid DEX Screener placement; the pool fee tier is intentionally
+  // not displayed as a second badge.
   const boosts = Number.isFinite(pool?.boosts) && pool.boosts > 0 ? Math.trunc(pool.boosts) : null;
 
   const marketCap = pool?.marketCap ?? pool?.fdv ?? null;
@@ -144,24 +182,47 @@ export default function PoolRow({ pool, index, sortColumnId }) {
   const isSecondary = (columnId) =>
     isSecondaryColumn(SORT_COLUMNS.find((c) => c.id === columnId), sortColumnId);
 
+  const age = formatAge(pool?.poolCreatedAt, pool?.age);
+
   return (
     <tr className="table-row">
       <td className="table-cell token-cell text-left">
         <div className="token-info">
           <span className="token-rank">{index + 1}</span>
 
+          {/*
+           * Only the All DEXes view shows the DEX mark. With a single DEX
+           * selected the venue is already implied by the active filter, so the
+           * specific-DEX row keeps its existing single-token-icon presentation.
+           */}
+          {showDexContext ? <DexIcon dex={pool?.dex} /> : null}
+
           {previewableToken ? (
             <button
               type="button"
-              onClick={() => previewableToken.iconUrl && setPreviewToken(previewableToken)}
+              ref={previewButtonRef}
+              onPointerEnter={() => {
+                if (!previewableToken.iconUrl) return;
+                setHoveredToken(previewableToken);
+                setIconHot(true);
+              }}
+              onPointerLeave={() => setIconHot(false)}
+              onFocus={() => {
+                if (!previewableToken.iconUrl) return;
+                setHoveredToken(previewableToken);
+                setIconHot(true);
+              }}
+              onBlur={() => {
+                setIconHot(false);
+                setPreviewHot(false);
+              }}
               className={`token-icon-button ${previewableToken.iconUrl ? '' : 'cursor-default'}`}
               title={previewableToken.iconUrl ? `Preview ${baseName || baseSymbol}` : undefined}
               aria-label={
                 previewableToken.iconUrl
-                  ? `Enlarge ${baseName || baseSymbol} icon`
+                  ? `${baseName || baseSymbol} icon preview`
                   : `${baseName || baseSymbol} (no image available)`
               }
-              disabled={!previewableToken.iconUrl}
             >
               <TokenIcon token={previewableToken} />
             </button>
@@ -210,11 +271,6 @@ export default function PoolRow({ pool, index, sortColumnId }) {
           </div>
 
           <div className="token-flags">
-            {fee ? (
-              <span className="token-fee" title="Pool fee">
-                {fee}
-              </span>
-            ) : null}
             {boosts ? (
               <span
                 className="token-boost"
@@ -229,19 +285,21 @@ export default function PoolRow({ pool, index, sortColumnId }) {
       </td>
 
       <td className="table-cell table-cell-right">
-        <span className="compact-number">{marketCap === null ? '—' : formatCurrency(marketCap)}</span>
+        <span className="compact-number compact-number-accent">
+          {marketCap === null ? '—' : formatCurrency(marketCap)}
+        </span>
       </td>
 
       <td className="table-cell table-cell-right">
         <span className="compact-number">
-          {pool?.priceUsd === null || pool?.priceUsd === undefined
-            ? '—'
-            : formatPrice(pool.priceUsd)}
+          {formatPriceUsd(pool?.priceUsd) ?? '—'}
         </span>
       </td>
 
       <td className="table-cell table-cell-center">
-        <span className="compact-number-muted">{formatAge(pool?.poolCreatedAt, pool?.age) || '—'}</span>
+        <span className={`compact-number-muted ${age && isRecentPool(pool) ? 'age-recent' : ''}`}>
+          {age || '—'}
+        </span>
       </td>
 
       <td className="table-cell table-cell-right">
@@ -257,7 +315,7 @@ export default function PoolRow({ pool, index, sortColumnId }) {
       </td>
 
       <td className={`table-cell table-cell-right ${isSecondary('traders') ? 'table-cell-col-optional' : ''}`}>
-        <span className="compact-number-muted">{formatTraders(pool?.traders)}</span>
+        <span className="compact-number">{formatTraders(pool?.traders)}</span>
       </td>
 
       <td className={`table-cell table-cell-right ${isSecondary('5m') ? 'table-cell-col-optional' : ''}`}>
@@ -284,8 +342,17 @@ export default function PoolRow({ pool, index, sortColumnId }) {
         </span>
       </td>
 
-      {previewToken ? (
-        <TokenImagePreview token={previewToken} onClose={() => setPreviewToken(null)} />
+      {hoveredToken?.iconUrl && (iconHot || previewHot) ? (
+        <TokenImagePreview
+          token={hoveredToken}
+          anchorRef={previewButtonRef}
+          onPointerEnter={() => setPreviewHot(true)}
+          onPointerLeave={() => setPreviewHot(false)}
+          onClose={() => {
+            setIconHot(false);
+            setPreviewHot(false);
+          }}
+        />
       ) : null}
     </tr>
   );

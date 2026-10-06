@@ -3,8 +3,8 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../api/client';
 import { subscribeFeature } from '../api/socket';
 import { mergePools } from '../utils/normalize';
-
-const PAGE_SIZE = 20;
+import { applyPoolUpdate } from '../utils/poolUpdate';
+import { PAGE_SIZE, getNextPageParam } from '../utils/pagination';
 
 export const POOL_FEATURES = {
   new: { fetcher: api.newPools },
@@ -33,6 +33,19 @@ function toPage(response, pageParam) {
   };
 }
 
+/**
+ * Reduces a WebSocket message onto the loaded page cache.
+ *
+ * This is deliberately a pure function so the "HTTP owns the initial page" rule
+ * is directly testable:
+ *  - with no loaded page, nothing is created — the socket can never bootstrap
+ *    page 1;
+ *  - a `snapshot` is ignored, because it restates what HTTP already returned;
+ *  - only a live `update` replaces page 1 in place, leaving page order and
+ *    pageParams intact so pagination keeps working.
+ *
+ * Returns `undefined` when the cache should be left untouched.
+ */
 export function usePools(feature, { enabled = true } = {}) {
   const config = POOL_FEATURES[feature];
   const queryClient = useQueryClient();
@@ -60,13 +73,9 @@ export function usePools(feature, { enabled = true } = {}) {
       }
     },
     initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages, lastPageParam) => {
-      if (!lastPage) return undefined;
-      if (lastPage.rateLimited) return undefined;
-      if (lastPage.hasMore === false) return undefined;
-      if (lastPage.pools.length < PAGE_SIZE) return undefined;
-      return (lastPageParam ?? allPages.length) + 1;
-    },
+    // Page 1 always comes from HTTP. getNextPageParam enforces the page-1..4
+    // ceiling, so the socket can never drive pagination beyond what HTTP fetched.
+    getNextPageParam,
     enabled: Boolean(enabled) && Boolean(config),
     staleTime: 30_000,
     gcTime: 10 * 60_000,
@@ -82,6 +91,11 @@ export function usePools(feature, { enabled = true } = {}) {
   const pages = query.data?.pages ?? [];
   const lastPage = pages.length > 0 ? pages[pages.length - 1] : null;
   const rateLimited = lastPage?.rateLimited === true;
+
+  // Page 1 has only ever come from HTTP. The socket is subscribed to for live
+  // updates once that response is on screen, and it must never be what makes
+  // the first page exist.
+  const hasHttpFirstPage = pages.length > 0;
 
   // A rate-limited page contributes no rows, so dropping it removes nothing from
   // the table and simply re-enables the next page request after the cooldown.
@@ -123,28 +137,19 @@ export function usePools(feature, { enabled = true } = {}) {
     loadMoreInFlight.current = false;
   }, [feature]);
 
+  // Subscribing is deferred until the HTTP page is available, so the socket is
+  // only ever a live-update channel on top of loaded data. If HTTP failed there
+  // is nothing to update, and the normal initial-load error stays visible.
   useEffect(() => {
-    if (!enabled || !config) return undefined;
+    if (!enabled || !config || !hasHttpFirstPage) return undefined;
 
     return subscribeFeature(FEATURE_WS_IDS[feature], (payload) => {
-      const pools = Array.isArray(payload?.pools) ? payload.pools : [];
-      if (pools.length === 0) return;
-
       queryClient.setQueryData(['pools', feature], (current) => {
-        const currentPages = current?.pages ?? [];
-        if (currentPages.length === 0) {
-          return { ...current, pages: [{ ...EMPTY_PAGE, pools }], pageParams: [1] };
-        }
-
-        // Replace page 1 in place so page order (and pageParams) stay intact.
-        const pages = currentPages.map((page, index) =>
-          index === 0 ? { ...page, pools } : page,
-        );
-
-        return { ...current, pages, pageParams: current?.pageParams ?? [1] };
+        const next = applyPoolUpdate(current, payload);
+        return next ?? current;
       });
     });
-  }, [feature, enabled, config, queryClient]);
+  }, [feature, enabled, config, queryClient, hasHttpFirstPage]);
 
   return useMemo(
     () => ({

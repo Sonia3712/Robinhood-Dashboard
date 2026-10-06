@@ -47,6 +47,32 @@ body {
   }
 }
 
+:root {
+  /*
+   * One type scale for the dense market table. Sizes are deliberately close
+   * together so raising readability costs almost no row height: the line-height
+   * is set tighter than Tailwind's `text-xs` would give, which absorbs most of
+   * the extra font-size.
+   */
+  --fs-table-value: 13px;
+  --lh-table-value: 17px;
+  --fs-table-head: 11px;
+  --fs-ui-label: 13px;
+  --fs-ui-meta: 11px;
+  --fs-badge: 10px;
+}
+
+@layer components {
+  /* Type-scale utilities so JSX never hardcodes a pixel size. */
+  .ui-label {
+    font-size: var(--fs-ui-label);
+  }
+
+  .ui-meta {
+    font-size: var(--fs-ui-meta);
+  }
+}
+
 .table-header {
   @apply bg-slate-900 border-b border-slate-800;
   position: sticky;
@@ -55,7 +81,8 @@ body {
 }
 
 .table-header th {
-  @apply px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap;
+  @apply px-2 py-2 font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap;
+  font-size: var(--fs-table-head);
   background: inherit;
 }
 
@@ -68,7 +95,24 @@ body {
 }
 
 .table-cell {
-  @apply px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden;
+  @apply px-2 py-1 text-xs whitespace-nowrap overflow-hidden;
+  font-size: var(--fs-table-value);
+  line-height: var(--lh-table-value);
+  /*
+   * A single hairline between columns, aligned from header to body because it
+   * rides the shared .table-cell rule. Kept far below the row separators so the
+   * grid reads as a table rather than a grid of boxed cells.
+   */
+  border-right: 1px solid rgba(100, 116, 139, 0.13);
+}
+
+.table-cell:last-child {
+  border-right: 0;
+}
+
+/* Keeps the header hairline visible against its own background. */
+.table-header th {
+  border-right-color: rgba(100, 116, 139, 0.2);
 }
 
 .table-cell-right {
@@ -90,7 +134,43 @@ body {
  * version) squeeze the pair symbols down to zero width.
  */
 .token-col {
-  width: 27%;
+  width: 26%;
+}
+
+/*
+ * `table-fixed` divides the width left over after .token-col evenly across every
+ * remaining column, which left a wide gap between AGE and TXNS. Explicit
+ * widths keep the numeric columns compact and stop the table from ever
+ * outgrowing the viewport (no page-level horizontal scrollbar). The widths are
+ * declared on the header cells, which is where `table-fixed` reads them from.
+ */
+.col-mcap,
+.col-price {
+  width: 8%;
+}
+
+.col-age,
+.col-txns {
+  width: 5.5%;
+}
+
+.col-volume {
+  width: 9%;
+}
+
+.col-traders {
+  width: 6%;
+}
+
+.col-5m,
+.col-1h,
+.col-6h,
+.col-24h {
+  width: 7%;
+}
+
+.col-liquidity {
+  width: 9%;
 }
 
 .token-info {
@@ -98,12 +178,14 @@ body {
 }
 
 .token-rank {
-  @apply text-slate-600 font-mono text-[10px] tabular-nums text-right shrink-0;
+  @apply text-slate-600 font-mono tabular-nums text-right shrink-0;
+  font-size: var(--fs-badge);
   width: 1.25rem;
 }
 
 .token-dex-version {
-  @apply text-[10px] font-semibold text-slate-300 bg-slate-800 border border-slate-700 rounded px-1 py-px flex-shrink-0 whitespace-nowrap;
+  @apply font-semibold text-slate-400 bg-slate-800/80 ring-1 ring-inset ring-slate-700 rounded px-1 py-px flex-shrink-0 whitespace-nowrap;
+  font-size: var(--fs-badge);
 }
 
 .token-pair-line {
@@ -128,16 +210,20 @@ body {
   @apply text-slate-600 shrink-0;
 }
 
+/* Project name is tertiary context, one step quieter than the pair. */
 .token-name {
-  @apply text-xs text-slate-400 truncate min-w-0;
+  @apply text-slate-400/90 truncate min-w-0;
+  font-size: var(--fs-table-value);
 }
 
 .token-flags {
   @apply flex items-center gap-1 flex-shrink-0;
 }
 
+/* Paid placement reads as a warm accent, distinct from the blue DEX accents. */
 .token-boost {
-  @apply text-[10px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-500/30 rounded px-1 py-px flex-shrink-0 tabular-nums inline-flex items-center gap-0.5;
+  @apply font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded px-1 py-px flex-shrink-0 tabular-nums inline-flex items-center gap-0.5;
+  font-size: var(--fs-badge);
 }
 
 .token-boost-icon {
@@ -149,7 +235,7 @@ body {
 }
 
 .token-icon-button {
-  @apply flex-shrink-0 rounded-full cursor-zoom-in bg-transparent p-0 border-0;
+  @apply flex-shrink-0 rounded-full cursor-default bg-transparent p-0 border-0;
   line-height: 0;
 }
 
@@ -177,49 +263,72 @@ body {
   @apply min-w-0 flex-1;
 }
 
-.token-symbol {
-  @apply font-semibold text-slate-100 truncate;
-}
-
-/* Quote symbol sits after the base pair, visually secondary. */
-.token-quote-symbol {
-  @apply text-slate-400 truncate;
-}
-
-.token-pair-separator {
-  @apply text-slate-600 shrink-0;
-}
-
-.token-name {
-  @apply text-xs text-slate-400 truncate;
-}
-
-.token-pair {
-  @apply text-xs text-slate-500 truncate;
-}
-
-.token-fee {
-  @apply text-[10px] text-slate-400 font-medium px-1 py-px bg-slate-800 rounded whitespace-nowrap flex-shrink-0 tabular-nums;
-}
-
-.price-up {
-  @apply text-green-400;
-}
-
-.price-down {
-  @apply text-red-400;
-}
-
-.price-neutral {
-  @apply text-slate-500;
-}
-
+/*
+ * Numeric value classes. These deliberately carry no colour of their own beyond
+ * the default: the semantic timeframe rules below are layered on top of them.
+ */
 .compact-number {
   @apply font-mono text-slate-200;
 }
 
 .compact-number-muted {
   @apply font-mono text-slate-500;
+}
+
+/* MCAP is a headline metric, so it carries the cool accent tone. */
+.compact-number-accent {
+  @apply font-mono text-sky-300;
+}
+
+/*
+ * Semantic timeframe colours MUST stay after .compact-number*. These are plain
+ * single-class selectors, so with equal specificity the later rule wins — and
+ * the timeframe cells carry both classes at once. Declaring them before
+ * .compact-number silently painted every 5M/1H/6H/24H value slate-200.
+ */
+.price-up {
+  @apply text-emerald-400;
+}
+
+.price-down {
+  @apply text-rose-400;
+}
+
+.price-neutral {
+  @apply text-slate-500;
+}
+
+/* Very recent pools get a light green tint; older values stay muted. */
+.age-recent {
+  @apply text-emerald-400/90;
+}
+
+/*
+ * DEX mark for the All DEXes row and the DEX navigation chips. This is the real
+ * local brand logo (see `dexIcons.js`), drawn as a square tile with the artwork
+ * contained — never cropped — and the same size as the token icon beside it.
+ */
+.dex-icon {
+  @apply h-7 w-7 rounded-md border border-slate-600 bg-slate-900 object-contain p-0.5 flex-shrink-0;
+}
+
+/*
+ * Neutral DEX mark used only when no real logo ships for that brand. Declared
+ * after .dex-icon so it overrides the image styling with a visible tile plus
+ * glyph: clearly "unknown venue" rather than a broken image, and never
+ * presented as an official DEX logo.
+ */
+.dex-icon-fallback {
+  @apply flex items-center justify-center rounded-md bg-slate-800 text-slate-300 ring-1 ring-inset ring-slate-600 p-0;
+}
+
+.dex-icon-glyph {
+  @apply h-3 w-3;
+}
+
+/* Inline brand logo inside a DEX navigation chip. */
+.dex-chip-logo {
+  @apply h-3.5 w-3.5 rounded-sm object-contain;
 }
 
 .search-input {
@@ -260,45 +369,20 @@ body {
   }
 }
 
-.token-preview-overlay {
-  @apply fixed inset-0 z-50 flex items-center justify-center p-4;
-  background: rgba(2, 6, 23, 0.82);
-  backdrop-filter: blur(2px);
+/*
+ * Floating token-hover preview (portal, position: fixed). It is a non-modal
+ * image beside the hovered icon: no backdrop, no blur, no body scroll lock.
+ * `pointer-events: auto` keeps it hoverable so it stays open while inspected.
+ */
+.token-preview-float {
+  position: fixed;
+  width: 150px;
+  height: 150px;
+  pointer-events: auto;
 }
 
-.token-preview-card {
-  @apply relative flex flex-col items-center gap-3 p-5 rounded-2xl;
-  background: #0f172a;
-  border: 1px solid rgba(100, 116, 139, 0.4);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
-}
-
-.token-preview-image {
-  @apply rounded-2xl object-contain bg-slate-800;
-  width: 256px;
-  height: 256px;
-  max-width: 70vw;
-  max-height: 70vh;
-}
-
-.token-preview-close {
-  @apply absolute top-2 right-2 p-1 rounded-full text-slate-400 hover:text-slate-100 hover:bg-slate-700/70 transition-colors;
-}
-
-.token-preview-meta {
-  @apply flex flex-col items-center gap-0.5 text-center;
-}
-
-.token-preview-title {
-  @apply text-sm font-semibold text-slate-100;
-}
-
-.token-preview-symbol {
-  @apply text-xs text-slate-400;
-}
-
-.token-preview-address {
-  @apply text-[11px] font-mono text-slate-500 break-all;
+.token-preview-float-image {
+  @apply h-full w-full rounded-xl border border-slate-700 bg-slate-900 object-contain shadow-2xl;
 }
 
 .match-banner {

@@ -3,19 +3,11 @@ import {
   BarChart3,
   Bell,
   Code,
-  LineChart,
   Search as SearchIcon,
   Star,
   TrendingUp,
-  Zap,
 } from 'lucide-react';
 import SearchBar from './SearchBar';
-
-const CATEGORIES = [
-  { id: 'new', label: 'New Pools', icon: Zap },
-  { id: 'trending', label: 'Trending', icon: TrendingUp },
-  { id: 'volume', label: 'High Volume', icon: LineChart },
-];
 
 const PLACEHOLDERS = [
   { label: 'Watchlist', icon: Star },
@@ -28,8 +20,6 @@ const PLACEHOLDERS = [
 const NETWORKS = [{ id: 'robinhood', label: 'Robinhood Chain', supported: true }];
 
 export default function Sidebar({
-  activeCategory,
-  onCategoryChange,
   searchQuery,
   onSearchChange,
   isSearchOpen,
@@ -60,7 +50,7 @@ export default function Sidebar({
     <aside className="flex w-44 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
       <div className="border-b border-slate-800 px-3 py-3">
         <h1 className="text-sm font-bold leading-tight text-slate-100">Robinhood DEX</h1>
-        <p className="text-[11px] text-slate-500">Chain 4663</p>
+        <p className="ui-meta text-slate-500">Chain 4663</p>
       </div>
 
       <div className="px-2 py-2">
@@ -68,7 +58,7 @@ export default function Sidebar({
           type="button"
           onClick={() => onSearchOpenChange(!isSearchOpen)}
           aria-expanded={isSearchOpen}
-          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 ui-label font-medium transition-colors ${
             isSearchOpen || searchQuery
               ? 'bg-blue-600 text-white'
               : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
@@ -92,33 +82,6 @@ export default function Sidebar({
         )}
       </div>
 
-      <nav className="px-2" aria-label="Pool categories">
-        <ul className="space-y-0.5">
-          {CATEGORIES.map((category) => {
-            const Icon = category.icon;
-            const isActive = activeCategory === category.id;
-
-            return (
-              <li key={category.id}>
-                <button
-                  type="button"
-                  onClick={() => onCategoryChange(category.id)}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {category.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
       <div className="mt-2 px-2 pb-2">
         <ul className="space-y-0.5">
           {PLACEHOLDERS.map((item) => {
@@ -128,7 +91,7 @@ export default function Sidebar({
                 <span
                   aria-disabled="true"
                   title="Not implemented"
-                  className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-600"
+                  className="flex w-full cursor-not-allowed select-none items-center gap-2 rounded-md px-2 py-1.5 ui-label text-slate-600"
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
@@ -140,7 +103,7 @@ export default function Sidebar({
       </div>
 
       <div className="mt-auto px-2 pb-3 pt-2">
-        <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+        <p className="px-2 py-1 ui-meta font-semibold uppercase tracking-wider text-slate-600">
           Networks
         </p>
         <ul className="space-y-0.5">
@@ -148,7 +111,7 @@ export default function Sidebar({
             <li key={network.id}>
               <span
                 aria-current={network.supported ? 'true' : undefined}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 ui-label ${
                   network.supported
                     ? 'bg-slate-800 text-slate-100'
                     : 'cursor-not-allowed text-slate-600'
@@ -165,7 +128,7 @@ export default function Sidebar({
             </li>
           ))}
         </ul>
-        <p className="mt-2 px-2 text-[10px] leading-relaxed text-slate-700">
+        <p className="mt-2 px-2 ui-meta leading-relaxed text-slate-700">
           {networkName} is the only supported network.
         </p>
       </div>

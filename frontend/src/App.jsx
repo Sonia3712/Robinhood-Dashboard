@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { useNewPools, useTrendingPools, useHighVolumePools, usePoolList } from './hooks/usePools';
 import { useSearch } from './hooks/useSearch';
 import { useSort } from './hooks/useSort';
@@ -6,18 +7,20 @@ import { sortPools } from './utils/sort';
 import { getUniquePoolKey } from './utils/normalize';
 import Sidebar from './components/Sidebar';
 import DexNavigation from './components/DexNavigation';
+import CategoryNavigation from './components/CategoryNavigation';
 import PoolTable from './components/PoolTable';
 import InfiniteScroll from './components/InfiniteScroll';
 import SearchResults from './components/SearchResults';
+import {
+  ALL_DEXES,
+  CATEGORY_BASE_PATH,
+  DEFAULT_CATEGORY_PATH,
+  categoryDexPath,
+  categoryIdFromSegment,
+  getCategory,
+} from './routes/categories';
 
-const ALL_DEXES = 'all';
 const NETWORK_NAME = 'Robinhood Chain';
-
-const CATEGORY_COPY = {
-  new: { title: 'New Pools', empty: 'No new pools found' },
-  trending: { title: 'Trending Pools', empty: 'No trending pools found' },
-  volume: { title: 'High Volume Pools', empty: 'No pools found' },
-};
 
 function buildDexIndex(pools) {
   const index = new Map();
@@ -31,8 +34,14 @@ function buildDexIndex(pools) {
     if (existing) {
       existing.poolCount += 1;
       if (!existing.name && dex?.name) existing.name = dex.name;
+      if (!existing.iconUrl && dex?.iconUrl) existing.iconUrl = dex.iconUrl;
     } else {
-      index.set(id, { id, name: dex?.name || dex?.id, poolCount: 1 });
+      index.set(id, {
+        id,
+        name: dex?.name || dex?.id,
+        iconUrl: dex?.iconUrl ?? null,
+        poolCount: 1,
+      });
     }
   }
 
@@ -46,11 +55,29 @@ function matchesDex(pool, dexId) {
   return pool?.dex?.id === dexId;
 }
 
-export default function App() {
-  const [activeCategory, setActiveCategory] = useState('new');
+function Dashboard() {
+  const { category: categorySegment, dexId: dexSegment } = useParams();
+  const navigate = useNavigate();
+
+  // The URL is the source of truth for both the category and the selected DEX,
+  // so a direct visit, a refresh and a back/forward step all resolve the same
+  // way. An unrecognised category segment redirects instead of rendering an
+  // empty dashboard.
+  const resolvedId = categoryIdFromSegment(categorySegment);
+
+  useEffect(() => {
+    if (resolvedId === null) navigate(DEFAULT_CATEGORY_PATH, { replace: true });
+  }, [resolvedId, navigate]);
+
+  const activeCategory = resolvedId ?? 'new';
+
+  // React Router hands back a decoded path segment, so this is the provider's
+  // own normalized DEX id (e.g. `uniswap-v4-robinhood`).
+  const requestedDexId =
+    typeof dexSegment === 'string' && dexSegment.trim() ? dexSegment.trim() : null;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [selectedDex, setSelectedDex] = useState(ALL_DEXES);
   const { sort, toggleSort } = useSort();
 
   const newPoolsQuery = useNewPools({ enabled: activeCategory === 'new' });
@@ -84,6 +111,15 @@ export default function App() {
 
   const availableDexes = useMemo(() => buildDexIndex(currentPools), [currentPools]);
 
+  // A DEX id in the URL that is not in this category's loaded data falls back to
+  // All DEXes instead of rendering an empty table. While the first page is still
+  // loading the list is not yet a reliable index, so the requested id is kept.
+  const selectedDex = useMemo(() => {
+    if (!requestedDexId) return ALL_DEXES;
+    if (availableDexes.length === 0) return requestedDexId;
+    return availableDexes.some((dex) => dex.id === requestedDexId) ? requestedDexId : ALL_DEXES;
+  }, [requestedDexId, availableDexes]);
+
   const visiblePools = useMemo(() => {
     const filtered = currentPools.filter((pool) => matchesDex(pool, selectedDex));
 
@@ -99,11 +135,25 @@ export default function App() {
     return sortPools(deduped, sort);
   }, [currentPools, selectedDex, sort]);
 
-  const handleCategoryChange = useCallback((categoryId) => {
-    setActiveCategory(categoryId);
+  const handleCategoryChange = useCallback(
+    (categoryId) => navigate(categoryDexPath(categoryId, ALL_DEXES)),
+    [navigate],
+  );
+
+  const handleDexChange = useCallback(
+    (dexId) => navigate(categoryDexPath(activeCategory, dexId)),
+    [activeCategory, navigate],
+  );
+
+  // Search is a category-wide view, so it is cleared whenever the category
+  // changes — from a sidebar click or from browser back/forward alike. The DEX
+  // filter no longer needs resetting here because it lives in the URL.
+  const previousCategoryRef = useRef(activeCategory);
+  useEffect(() => {
+    if (previousCategoryRef.current === activeCategory) return;
+    previousCategoryRef.current = activeCategory;
     setSearchQuery('');
-    setSelectedDex(ALL_DEXES);
-  }, []);
+  }, [activeCategory]);
 
   const handleSearchChange = useCallback((value) => {
     setSearchQuery(value);
@@ -131,13 +181,11 @@ export default function App() {
 
   // A failed page never clears the table: only an empty result is a hard error.
   const hasBlockingError = activeQuery.isError && visiblePools.length === 0 && !isRateLimited;
-  const copy = CATEGORY_COPY[activeCategory];
+  const copy = getCategory(activeCategory);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
       <Sidebar
-        activeCategory={activeCategory}
-        onCategoryChange={handleCategoryChange}
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         isSearchOpen={isSearchOpen}
@@ -146,38 +194,31 @@ export default function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
-          <h2 className="truncate text-sm font-semibold text-slate-100">
-            {isSearching ? 'Search Results' : copy.title}
-          </h2>
-          <div className="flex shrink-0 items-center gap-3 text-[11px] text-slate-500">
-            {!isSearching && availableDexes.length > 0 && (
-              <span className="tabular-nums">
-                {visiblePools.length} of {currentPools.length} pools
-              </span>
-            )}
-            {activeQuery.dataUpdatedAt > 0 && (
-              <span className="hidden sm:inline tabular-nums">
-                {new Date(activeQuery.dataUpdatedAt).toLocaleTimeString()}
-              </span>
-            )}
-            {isSearching && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="text-blue-400 transition-colors hover:text-blue-300"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </header>
+        {isSearching && (
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
+            <h2 className="truncate text-sm font-semibold text-slate-100">Search Results</h2>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-blue-400 transition-colors hover:text-blue-300"
+            >
+              Clear
+            </button>
+          </header>
+        )}
 
         {!isSearching && (
           <DexNavigation
             dexes={availableDexes}
             selectedDex={selectedDex}
-            onSelect={setSelectedDex}
+            onSelect={handleDexChange}
+          />
+        )}
+
+        {!isSearching && (
+          <CategoryNavigation
+            activeCategory={activeCategory}
+            onCategoryChange={handleCategoryChange}
           />
         )}
 
@@ -195,7 +236,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {isSearching ? (
             <SearchResults
               query={searchResult.settledQuery}
@@ -227,6 +268,7 @@ export default function App() {
                 }
                 sort={sort}
                 onSort={toggleSort}
+                showDexContext={selectedDex === ALL_DEXES}
               />
 
               <InfiniteScroll
@@ -240,5 +282,16 @@ export default function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to={DEFAULT_CATEGORY_PATH} replace />} />
+      <Route path={`${CATEGORY_BASE_PATH}/:category`} element={<Dashboard />} />
+      <Route path={`${CATEGORY_BASE_PATH}/:category/:dexId`} element={<Dashboard />} />
+      <Route path="*" element={<Navigate to={DEFAULT_CATEGORY_PATH} replace />} />
+    </Routes>
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
+import { ALL_DEXES } from '../routes/categories';
+import { getDexImage } from '../utils/dexIcons';
 
 const MIN_VISIBLE_DEXES = 1;
 const MAX_VISIBLE_DEXES = 5;
@@ -8,7 +10,8 @@ const MENU_WIDTH = 208;
 const CHIP_GAP = 6;
 const VIEWPORT_MARGIN = 8;
 
-// Above the sticky table header (z-10) and the token preview overlay (z-50).
+// Above the sticky table header (z-10); the floating token preview sits at z-80
+// so an open preview can float over the menu when both are visible.
 const MENU_Z = 70;
 
 const MENU_ITEM_HEIGHT = 30;
@@ -163,7 +166,7 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
   }, [selectedDex]);
 
   const chipClass = (isActive) =>
-    `shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+    `ui-label inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 font-medium leading-tight transition-colors ${
       isActive
         ? 'bg-blue-600 text-white'
         : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100'
@@ -172,6 +175,7 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
   const chip = (dex) => {
     const id = dex.id;
     const isActive = selectedDex === id;
+    const logo = getDexImage(dex);
     return (
       <button
         key={id}
@@ -182,6 +186,7 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
         title={`${dex.name} · ${dex.poolCount} pools`}
         className={chipClass(isActive)}
       >
+        {logo ? <img src={logo.src} alt="" aria-hidden="true" className="dex-chip-logo" /> : null}
         {dex.name}
       </button>
     );
@@ -194,8 +199,8 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
       onClick={() => (isMoreOpen ? setIsMoreOpen(false) : openMenu())}
       aria-expanded={isMoreOpen}
       aria-haspopup="true"
-      data-more-button="true"
-      className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+data-more-button="true"
+        className={`ui-label flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 font-medium leading-tight transition-colors ${
         overflow.some((dex) => dex.id === selectedDex)
           ? 'bg-blue-600 text-white'
           : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100'
@@ -239,9 +244,9 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
       >
         <button
           type="button"
-          onClick={() => onSelect('all')}
-          aria-pressed={selectedDex === 'all'}
-          className={chipClass(selectedDex === 'all')}
+          onClick={() => onSelect(ALL_DEXES)}
+          aria-pressed={selectedDex === ALL_DEXES}
+          className={chipClass(selectedDex === ALL_DEXES)}
         >
           {ALL_DEXES_BUTTON}
         </button>
@@ -269,6 +274,7 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
             {overflow.map((dex) => {
               const id = dex.id;
               const isActive = selectedDex === id;
+              const logo = getDexImage(dex);
               return (
                 <button
                   key={id}
@@ -279,14 +285,17 @@ export default function DexNavigation({ dexes = [], selectedDex, onSelect }) {
                     setIsMoreOpen(false);
                   }}
                   aria-pressed={isActive}
-                  className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-xs transition-colors ${
+                  className={`ui-label flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
                     isActive
                       ? 'bg-blue-600 text-white'
                       : 'text-slate-300 hover:bg-slate-700 hover:text-slate-100'
                   }`}
                 >
+                  {logo ? (
+                    <img src={logo.src} alt="" aria-hidden="true" className="dex-chip-logo" />
+                  ) : null}
                   <span className="truncate">{dex.name}</span>
-                  <span className="shrink-0 text-[10px] tabular-nums opacity-60">
+                  <span className="ml-auto shrink-0 text-[10px] tabular-nums opacity-60">
                     {dex.poolCount}
                   </span>
                 </button>

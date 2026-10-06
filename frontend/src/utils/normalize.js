@@ -32,10 +32,42 @@ export function formatNumber(value) {
 export function formatPrice(value) {
   if (!isNum(value)) return null;
   const abs = Math.abs(value);
+  if (abs === 0) return '0.00';
   if (abs >= 1) return value.toFixed(4);
   if (abs >= 0.0001) return value.toFixed(6);
   if (abs >= 0.000001) return value.toFixed(8);
   return value.toExponential(2);
+}
+
+/** Price is always quoted in USD, so the `$` belongs in the formatted value. */
+export function formatPriceUsd(value) {
+  const formatted = formatPrice(value);
+  if (formatted === null) return null;
+
+  // The sign moves in front of the `$`. Only a leading sign is stripped: an
+  // exponential form such as `1.00e-8` carries its own meaningful `-`.
+  const sign = formatted.startsWith('-') ? '-' : '';
+  return `${sign}$${sign ? formatted.slice(1) : formatted}`;
+}
+
+/**
+ * Age window that receives the green "recent" tint. `formatAge` renders days as
+ * a whole-day bucket (`5d` means 5 days up to 6 days), so the cutoff must sit
+ * at exactly 6 days for the visible boundary to match the spec: every `*h` and
+ * `1d`..`5d` label is green, `6d` and beyond fall through to the normal
+ * white/muted treatment. This only changes the colour; the displayed text is
+ * still produced by `formatAge` and is never rewritten or hidden.
+ */
+export const RECENT_POOL_SECONDS = 6 * 24 * 60 * 60;
+
+export function isRecentPool(pool) {
+  const age = pool?.ageSeconds;
+  return isNum(age) && age >= 0 && age < RECENT_POOL_SECONDS;
+}
+
+export function getDexIconUrl(dex) {
+  const iconUrl = typeof dex?.iconUrl === 'string' ? dex.iconUrl.trim() : '';
+  return iconUrl || null;
 }
 
 export function formatTraders(value) {

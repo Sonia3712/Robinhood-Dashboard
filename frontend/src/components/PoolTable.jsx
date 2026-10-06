@@ -20,7 +20,7 @@ function SortableHeader({ column, sort, onSort }) {
     <th
       scope="col"
       aria-sort={isActive ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-      className={`table-cell ${alignClass} ${
+      className={`table-cell col-${column.id} ${alignClass} ${
         isSecondaryColumn(column, sort.columnId) ? 'table-cell-col-optional' : ''
       } ${isActive ? 'text-blue-400' : ''}`}
     >
@@ -46,6 +46,7 @@ export default function PoolTable({
   emptyMessage = 'No pools found',
   sort,
   onSort,
+  showDexContext = false,
 }) {
   if (isLoading) return <LoadingSpinner />;
 
@@ -100,6 +101,7 @@ export default function PoolTable({
               pool={pool}
               index={index}
               sortColumnId={sort.columnId}
+              showDexContext={showDexContext}
             />
           ))}
         </tbody>
