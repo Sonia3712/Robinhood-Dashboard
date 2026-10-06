@@ -4,23 +4,20 @@ import {
   getTopPoolsByVolume,
   getTrendingPools,
   getPoolByAddress,
+  getCategoryPageCount,
 } from '../providers/poolProvider.js';
 import config from '../config.js';
 import { logThrottled } from '../utils/logger.js';
-import {
-  MAX_PAGE,
-  PAGE_SIZE,
-  readNetwork,
-  readPage,
-  isSupportedNetwork,
-} from '../utils/parseQuery.js';
+import { PAGE_SIZE, readNetwork, readPage, isSupportedNetwork } from '../utils/parseQuery.js';
+
+const MAX_PAGE = 4;
 
 const router = Router();
 
 const LISTS = {
-  new: { handler: getNewPools, feature: 'new-pools' },
-  trending: { handler: getTrendingPools, feature: 'trending' },
-  'high-volume': { handler: getTopPoolsByVolume, feature: 'high-volume' },
+  new: { handler: getNewPools, feature: 'new-pools', category: 'new' },
+  trending: { handler: getTrendingPools, feature: 'trending', category: 'trending' },
+  'high-volume': { handler: getTopPoolsByVolume, feature: 'high-volume', category: 'highVolume' },
 };
 
 function retryAfterSeconds(error) {
@@ -29,7 +26,22 @@ function retryAfterSeconds(error) {
   return Math.max(1, Math.ceil(ms / 1000));
 }
 
-for (const [path, { handler, feature }] of Object.entries(LISTS)) {
+async function getHasMore(category, page, currentPoolCount) {
+  if (page >= MAX_PAGE) return false;
+  if (currentPoolCount < PAGE_SIZE) return false;
+
+  // Check if next page already exists in MongoDB
+  try {
+    const pageCount = await getCategoryPageCount(category);
+    if (pageCount > page) return true;
+  } catch {
+    // If we can't check, fall back to pool count heuristic
+  }
+
+  return currentPoolCount >= PAGE_SIZE;
+}
+
+for (const [path, { handler, feature, category }] of Object.entries(LISTS)) {
   router.get(`/${path}`, async (req, res) => {
     if (!isSupportedNetwork(req.query.network)) {
       return res.status(400).json({
@@ -42,15 +54,26 @@ for (const [path, { handler, feature }] of Object.entries(LISTS)) {
     const network = readNetwork(req.query.network);
     const page = readPage(req.query.page);
 
+    // Enforce max page = 4
+    if (page > MAX_PAGE) {
+      return res.status(400).json({
+        error: `Page ${page} exceeds maximum of ${MAX_PAGE}`,
+        feature,
+        page,
+        pools: [],
+      });
+    }
+
     try {
       const pools = await handler(page);
+      const hasMore = await getHasMore(category, page, pools.length);
 
       res.json({
         feature,
         network,
         page,
         count: pools.length,
-        hasMore: pools.length >= PAGE_SIZE && page < MAX_PAGE,
+        hasMore,
         rateLimited: false,
         pools,
         updatedAt: new Date().toISOString(),

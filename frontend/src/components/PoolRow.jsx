@@ -141,7 +141,7 @@ function usableSymbol(value) {
   return trimmed;
 }
 
-export default function PoolRow({ pool, index, sortColumnId, showDexContext = false }) {
+export default function PoolRow({ pool, index, sortColumnId, showDexContext = false, rowOffset = 0 }) {
   const [hoveredToken, setHoveredToken] = useState(null);
   const [iconHot, setIconHot] = useState(false);
   const [previewHot, setPreviewHot] = useState(false);
@@ -188,7 +188,7 @@ export default function PoolRow({ pool, index, sortColumnId, showDexContext = fa
     <tr className="table-row">
       <td className="table-cell token-cell text-left">
         <div className="token-info">
-          <span className="token-rank">{index + 1}</span>
+          <span className="token-rank">{rowOffset + index + 1}</span>
 
           {/*
            * Only the All DEXes view shows the DEX mark. With a single DEX

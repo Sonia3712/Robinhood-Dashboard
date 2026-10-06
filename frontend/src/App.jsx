@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { useNewPools, useTrendingPools, useHighVolumePools, usePoolList } from './hooks/usePools';
+import { useNewPools, useTrendingPools, useHighVolumePools } from './hooks/usePools';
 import { useSearch } from './hooks/useSearch';
 import { useSort } from './hooks/useSort';
 import { sortPools } from './utils/sort';
@@ -9,7 +9,7 @@ import Sidebar from './components/Sidebar';
 import DexNavigation from './components/DexNavigation';
 import CategoryNavigation from './components/CategoryNavigation';
 import PoolTable from './components/PoolTable';
-import InfiniteScroll from './components/InfiniteScroll';
+import Pagination from './components/Pagination';
 import SearchResults from './components/SearchResults';
 import {
   ALL_DEXES,
@@ -21,6 +21,7 @@ import {
 } from './routes/categories';
 
 const NETWORK_NAME = 'Robinhood Chain';
+const PAGE_SIZE = 20;
 
 function buildDexIndex(pools) {
   const index = new Map();
@@ -55,14 +56,47 @@ function matchesDex(pool, dexId) {
   return pool?.dex?.id === dexId;
 }
 
+function getDexPaginatedPools(allPools, selectedDex, page, pageSize) {
+  if (selectedDex === ALL_DEXES) {
+    // For All DEXes, we use the provider's pagination directly
+    // The caller should pass the current page's pools only
+    return { pools: allPools, totalPages: 1, hasMore: false };
+  }
+
+  // For specific DEX: filter, deduplicate, sort, then paginate
+  const filtered = allPools.filter((pool) => matchesDex(pool, selectedDex));
+
+  const seen = new Set();
+  const deduped = [];
+  for (const pool of filtered) {
+    const key = getUniquePoolKey(pool);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    deduped.push(pool);
+  }
+
+  const sorted = sortPools(deduped, { columnId: 'age', direction: 'asc' }); // Default sort, will be overridden by caller
+
+  const totalPools = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalPools / pageSize));
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pagePools = sorted.slice(start, end);
+  const hasMore = end < totalPools;
+
+  return {
+    pools: pagePools,
+    totalPages,
+    hasMore,
+    totalPools,
+    rowOffset: start,
+  };
+}
+
 function Dashboard() {
   const { category: categorySegment, dexId: dexSegment } = useParams();
   const navigate = useNavigate();
 
-  // The URL is the source of truth for both the category and the selected DEX,
-  // so a direct visit, a refresh and a back/forward step all resolve the same
-  // way. An unrecognised category segment redirects instead of rendering an
-  // empty dashboard.
   const resolvedId = categoryIdFromSegment(categorySegment);
 
   useEffect(() => {
@@ -71,8 +105,6 @@ function Dashboard() {
 
   const activeCategory = resolvedId ?? 'new';
 
-  // React Router hands back a decoded path segment, so this is the provider's
-  // own normalized DEX id (e.g. `uniswap-v4-robinhood`).
   const requestedDexId =
     typeof dexSegment === 'string' && dexSegment.trim() ? dexSegment.trim() : null;
 
@@ -87,10 +119,6 @@ function Dashboard() {
   const searchResult = useSearch(searchQuery);
   const isSearching = searchQuery.trim().length > 0;
 
-  const newPools = usePoolList(newPoolsQuery);
-  const trendingPools = usePoolList(trendingQuery);
-  const highVolumePools = usePoolList(highVolumeQuery);
-
   const activeQuery =
     activeCategory === 'new'
       ? newPoolsQuery
@@ -98,30 +126,41 @@ function Dashboard() {
         ? trendingQuery
         : highVolumeQuery;
 
-  const poolsByCategory = useMemo(
-    () => ({
-      new: newPools,
-      trending: trendingPools,
-      volume: highVolumePools,
-    }),
-    [newPools, trendingPools, highVolumePools],
-  );
+  // All cached pools across all loaded pages for this category
+  const allCachedPools = activeQuery.allCachedPools ?? [];
 
-  const currentPools = poolsByCategory[activeCategory];
+  // Build DEX index from ALL cached pools
+  const availableDexes = useMemo(() => buildDexIndex(allCachedPools), [allCachedPools]);
 
-  const availableDexes = useMemo(() => buildDexIndex(currentPools), [currentPools]);
-
-  // A DEX id in the URL that is not in this category's loaded data falls back to
-  // All DEXes instead of rendering an empty table. While the first page is still
-  // loading the list is not yet a reliable index, so the requested id is kept.
+  // Resolve selected DEX from URL
   const selectedDex = useMemo(() => {
     if (!requestedDexId) return ALL_DEXES;
     if (availableDexes.length === 0) return requestedDexId;
     return availableDexes.some((dex) => dex.id === requestedDexId) ? requestedDexId : ALL_DEXES;
   }, [requestedDexId, availableDexes]);
 
-  const visiblePools = useMemo(() => {
-    const filtered = currentPools.filter((pool) => matchesDex(pool, selectedDex));
+  // DEX-specific pagination state
+  const [dexPage, setDexPage] = useState(1);
+
+  // Reset DEX page when DEX or category changes
+  useEffect(() => {
+    setDexPage(1);
+  }, [selectedDex, activeCategory]);
+
+  // Compute visible pools and pagination for current view
+  const { pools: visiblePools, totalPages: dexTotalPages, hasMore: dexHasMore, rowOffset } = useMemo(() => {
+    if (selectedDex === ALL_DEXES) {
+      // All DEXes: use provider pagination directly
+      return {
+        pools: activeQuery.pools,
+        totalPages: activeQuery.totalPages,
+        hasMore: activeQuery.hasMore,
+        rowOffset: (activeQuery.currentPage - 1) * PAGE_SIZE,
+      };
+    }
+
+    // Specific DEX: filter all cached pools, then paginate
+    const filtered = allCachedPools.filter((pool) => matchesDex(pool, selectedDex));
 
     const seen = new Set();
     const deduped = [];
@@ -132,8 +171,27 @@ function Dashboard() {
       deduped.push(pool);
     }
 
-    return sortPools(deduped, sort);
-  }, [currentPools, selectedDex, sort]);
+    const sorted = sortPools(deduped, sort);
+    const totalPools = sorted.length;
+    const totalPages = Math.max(1, Math.ceil(totalPools / PAGE_SIZE));
+    const clampedPage = Math.max(1, Math.min(dexPage, totalPages));
+    const start = (clampedPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    const pagePools = sorted.slice(start, end);
+    const hasMore = end < totalPools;
+
+    // If clampedPage changed, update state (will trigger re-render)
+    if (clampedPage !== dexPage) {
+      setDexPage(clampedPage);
+    }
+
+    return {
+      pools: pagePools,
+      totalPages,
+      hasMore,
+      rowOffset: start,
+    };
+  }, [selectedDex, activeQuery.pools, activeQuery.currentPage, activeQuery.totalPages, activeQuery.hasMore, allCachedPools, sort, dexPage]);
 
   const handleCategoryChange = useCallback(
     (categoryId) => navigate(categoryDexPath(categoryId, ALL_DEXES)),
@@ -145,9 +203,14 @@ function Dashboard() {
     [activeCategory, navigate],
   );
 
-  // Search is a category-wide view, so it is cleared whenever the category
-  // changes — from a sidebar click or from browser back/forward alike. The DEX
-  // filter no longer needs resetting here because it lives in the URL.
+  // Handle DEX pagination (only for specific DEX)
+  const handleDexPageChange = useCallback(
+    (page) => {
+      setDexPage(page);
+    },
+    [],
+  );
+
   const previousCategoryRef = useRef(activeCategory);
   useEffect(() => {
     if (previousCategoryRef.current === activeCategory) return;
@@ -160,13 +223,10 @@ function Dashboard() {
     if (value.trim()) setIsSearchOpen(true);
   }, []);
 
-  const isRateLimited = Boolean(activeQuery.rateLimited);
+  const isRateLimited = Boolean(activeQuery.isRateLimited);
   const retryRateLimited = activeQuery.retryRateLimited;
   const retryAfterMs = activeQuery.retryAfterMs;
-  const handleLoadMore = activeQuery.loadMore;
 
-  // Already-loaded pages stay on screen while the provider cools down; the
-  // stalled page is retried once per backoff window instead of on every scroll.
   useEffect(() => {
     if (!isRateLimited) return undefined;
 
@@ -177,11 +237,16 @@ function Dashboard() {
     return () => clearTimeout(timer);
   }, [isRateLimited, retryAfterMs, retryRateLimited]);
 
-  const isInitialLoading = activeQuery.isPending && activeQuery.data === undefined;
-
-  // A failed page never clears the table: only an empty result is a hard error.
+  const isInitialLoading = activeQuery.isLoading;
   const hasBlockingError = activeQuery.isError && visiblePools.length === 0 && !isRateLimited;
   const copy = getCategory(activeCategory);
+
+  // Pagination props - use provider pagination for All DEXes, DEX-specific for specific DEX
+  const paginationCurrentPage = selectedDex === ALL_DEXES ? activeQuery.currentPage : dexPage;
+  const paginationTotalPages = selectedDex === ALL_DEXES ? activeQuery.totalPages : dexTotalPages;
+  const paginationHasMore = selectedDex === ALL_DEXES ? activeQuery.hasMore : dexHasMore;
+  const paginationOnPageChange = selectedDex === ALL_DEXES ? activeQuery.goToPage : handleDexPageChange;
+  const paginationDisabled = activeQuery.isFetching;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
@@ -260,7 +325,7 @@ function Dashboard() {
                 isError={hasBlockingError}
                 error={activeQuery.error}
                 onRetry={() => activeQuery.refetch()}
-                isRefreshing={activeQuery.isFetching && !activeQuery.isFetchingNextPage}
+                isRefreshing={activeQuery.isFetching}
                 emptyMessage={
                   selectedDex === ALL_DEXES
                     ? copy.empty
@@ -269,13 +334,15 @@ function Dashboard() {
                 sort={sort}
                 onSort={toggleSort}
                 showDexContext={selectedDex === ALL_DEXES}
+                rowOffset={rowOffset}
               />
 
-              <InfiniteScroll
-                hasMore={Boolean(activeQuery.hasNextPage)}
-                isFetching={Boolean(activeQuery.isFetchingNextPage)}
-                isWaiting={isRateLimited}
-                onLoadMore={handleLoadMore}
+              <Pagination
+                currentPage={paginationCurrentPage}
+                totalPages={paginationTotalPages}
+                hasMore={paginationHasMore}
+                onPageChange={paginationOnPageChange}
+                disabled={paginationDisabled}
               />
             </>
           )}

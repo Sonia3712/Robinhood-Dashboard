@@ -3,6 +3,7 @@ import {
   getNewPools,
   getTrendingPools,
   getTopPoolsByVolume,
+  updatePoolFromWebSocket,
 } from '../providers/poolProvider.js';
 import config from '../config.js';
 import { logThrottled } from '../utils/logger.js';
@@ -14,6 +15,12 @@ export const DEFAULT_FEATURES = {
   'new-pools': { fetch: getNewPools, intervalMs: 45_000 },
   trending: { fetch: getTrendingPools, intervalMs: 120_000 },
   'high-volume': { fetch: getTopPoolsByVolume, intervalMs: 60_000 },
+};
+
+const FEATURE_TO_CATEGORY = {
+  'new-pools': 'new',
+  trending: 'trending',
+  'high-volume': 'highVolume',
 };
 
 export function attachPoolPusher(server, overrides = {}) {

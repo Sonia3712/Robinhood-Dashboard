@@ -47,6 +47,7 @@ export default function PoolTable({
   sort,
   onSort,
   showDexContext = false,
+  rowOffset = 0,
 }) {
   if (isLoading) return <LoadingSpinner />;
 
@@ -102,6 +103,7 @@ export default function PoolTable({
               index={index}
               sortColumnId={sort.columnId}
               showDexContext={showDexContext}
+              rowOffset={rowOffset}
             />
           ))}
         </tbody>

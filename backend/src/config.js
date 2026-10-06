@@ -6,6 +6,8 @@ const REQUIRED_TEXT_VARS = {
   NETWORK: 'network',
   GECKOTERMINAL_BASE_URL: 'geckoTerminalBaseUrl',
   DEXSCREENER_BASE_URL: 'dexScreenerBaseUrl',
+  MONGODB_URI: 'mongoUri',
+  MONGODB_DB_NAME: 'mongoDbName',
 };
 
 const REQUIRED_NUM_VARS = ['PORT', 'CHAIN_ID'];
@@ -64,11 +66,16 @@ export function loadConfig(env = process.env) {
     network: text('NETWORK'),
     geckoTerminalBaseUrl: text('GECKOTERMINAL_BASE_URL'),
     dexScreenerBaseUrl: text('DEXSCREENER_BASE_URL'),
+    mongoUri: text('MONGODB_URI'),
+    mongoDbName: text('MONGODB_DB_NAME') || 'robinhood-dex',
 
     corsOrigins: toList(env.CORS_ORIGINS) ?? [],
     allowAllOrigins: (env.CORS_ORIGINS || '').trim() === '*',
 
     requestLog: toBool(env.REQUEST_LOG ?? env.LOG_REQUESTS, true),
+
+    cacheTtlSeconds: toInt(env.CACHE_TTL_SECONDS) ?? 60,
+    databaseFreshnessSeconds: toInt(env.DATABASE_FRESHNESS_SECONDS) ?? 300,
   };
 }
 
@@ -91,6 +98,10 @@ export function collectConfigErrors(config) {
     else if (!Number.isInteger(value)) {
       errors.push(`${name}: must be an integer (received: ${show(value)})`);
     }
+  }
+
+  if (!config.mongoUri) {
+    errors.push('MONGODB_URI: is required but was not set');
   }
 
   if (!config.allowAllOrigins && config.corsOrigins.length === 0) {
