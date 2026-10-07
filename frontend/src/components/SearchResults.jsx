@@ -4,30 +4,15 @@ import ErrorMessage from './ErrorMessage';
 
 const ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 
-function MatchBanner({ query, matchType, verifiedOnChain, count }) {
-  if (ADDRESS_PATTERN.test(query.trim())) {
-    return (
-      <div
-        className={`match-banner ${verifiedOnChain ? 'match-banner-ok' : 'match-banner-warn'}`}
-        role="status"
-      >
-        <span className="match-banner-title">
-          {verifiedOnChain ? 'Verified contract on Robinhood Chain' : 'No contract code on Robinhood Chain'}
-        </span>
-        <span className="match-banner-body">
-          {count} {count === 1 ? 'pool' : 'pools'} where this exact address is the base or quote token.
-          {verifiedOnChain ? '' : ' Symbol matches are not substituted for address matches.'}
-        </span>
-      </div>
-    );
-  }
-
+function ResultInfo({ query, count }) {
+  const isAddress = ADDRESS_PATTERN.test(query.trim());
   return (
-    <div className="match-banner" role="status">
-      <span className="match-banner-title">Symbol / name search</span>
-      <span className="match-banner-body">
-        {count} {count === 1 ? 'pool' : 'pools'} matching “{query}” on Robinhood Chain. A symbol can
-        match several different contracts.
+    <div className="result-info" role="status">
+      <span className="result-info-label">
+        {isAddress ? 'Exact address search' : 'Symbol / name search'}
+      </span>
+      <span className="result-info-body">
+        {count} {count === 1 ? 'pool' : 'pools'} found on Robinhood Chain.
       </span>
     </div>
   );
@@ -41,8 +26,6 @@ export default function SearchResults({
   isFetching = false,
   isError = false,
   error = null,
-  matchType,
-  verifiedOnChain,
   onRetry,
   sort,
   onSort,
@@ -70,12 +53,7 @@ export default function SearchResults({
   if (pools.length === 0) {
     return (
       <div className="space-y-4">
-        <MatchBanner
-          query={query}
-          matchType={matchType}
-          verifiedOnChain={verifiedOnChain}
-          count={0}
-        />
+        <ResultInfo query={query} count={0} />
         <div className="text-center py-16 text-slate-500">
           <p className="text-lg font-medium">No trading pairs found</p>
           <p className="text-sm mt-1">
@@ -90,12 +68,7 @@ export default function SearchResults({
 
   return (
     <div className="space-y-4">
-      <MatchBanner
-        query={query}
-        matchType={matchType}
-        verifiedOnChain={verifiedOnChain}
-        count={pools.length}
-      />
+      <ResultInfo query={query} count={pools.length} />
 
       {isFetching ? (
         <p className="text-xs text-slate-500" role="status">

@@ -417,6 +417,20 @@ body {
   @apply text-amber-300;
 }
 
+.result-info {
+  @apply flex flex-col gap-0.5 px-4 py-3 rounded-xl text-sm;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.result-info-label {
+  @apply font-semibold text-slate-100;
+}
+
+.result-info-body {
+  @apply text-xs text-slate-400;
+}
+
 @media (min-width: 1024px) {
   .token-cell-sticky {
     position: sticky;

@@ -6,8 +6,8 @@
   "description": "Backend API for the Robinhood Chain DEX dashboard",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node api.js && node server.js",
+    "dev": "node api.js && node --watch server.js"
   },
   "engines": {
     "node": ">=20.12.0"

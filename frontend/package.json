@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "start": "vite",
-    "build": "vite build",
+    "dev": "node api.js && vite",
+    "start": "node api.js && vite",
+    "build": "node api.js && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
